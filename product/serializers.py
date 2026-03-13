@@ -22,9 +22,11 @@ class ProductImageSerializer(serializers.ModelSerializer):
         fields='__all__'
 
 class ProductCategoryOptionValueSerializer(serializers.ModelSerializer):
+    
     class Meta:
         model=ProductCategoryOptionValue
         fields='__all__'
+ 
 
 class ProductCategoryOptionSerializer(serializers.ModelSerializer):
     values = ProductCategoryOptionValueSerializer(many=True, read_only=True)
@@ -33,7 +35,7 @@ class ProductCategoryOptionSerializer(serializers.ModelSerializer):
         fields='__all__'
 
 class ProductVariantOptionValueSerializer(serializers.ModelSerializer):
-    
+    id = serializers.IntegerField(required=False)
     option_value_data=serializers.SerializerMethodField()
     class Meta:
         model=ProductVariantOptionValue
@@ -48,6 +50,7 @@ class ProductVariantOptionValueSerializer(serializers.ModelSerializer):
         }
 
 class ProductVariantSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
     option_values = ProductVariantOptionValueSerializer(many=True)
     class Meta:
         model=ProductVariant
@@ -56,10 +59,30 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(many=True)
+    shop_data=serializers.SerializerMethodField(read_only=True)
+    sub_category_data=serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model=Product
-        fields=['id', 'name', 'slug', 'shop', 'sub_category', 'variants']
+        fields=['id', 'name', 'slug', 'shop','shop_data','sub_category','sub_category_data', 'variants','created_at','updated_at']
+        read_only_fields = ['shop','created_at','updated_at']
+    def get_shop_data(self,obj):
+        return {
+            "shop_name":obj.shop.name,
+            "shop_id":obj.shop.id,
+        }
+    def get_sub_category_data(self,obj):
+        return {
+            "sub_category_name":obj.sub_category.name,
+            "sub_category_id":obj.sub_category.id,
+        }
+
+    def validate(self, attrs):
+        if self.instance:
+            if self.instance.shop.owner != self.context['request'].user:
+                raise serializers.ValidationError({"detail": "You are not authorized to update this product because you are not the owner of the shop."})
+        return attrs
+
 
     def create(self, validated_data):
         variants_data = validated_data.pop('variants')
@@ -73,3 +96,38 @@ class ProductSerializer(serializers.ModelSerializer):
                 ProductVariantOptionValue.objects.create(variant=variant, **ov_data)
         
         return product
+
+    def update(self, instance, validated_data):
+        variants_data = validated_data.pop('variants', None)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if variants_data is not None:
+            
+            keep_variants = []
+            for variant_data in variants_data:
+                variant_id = variant_data.get('id')
+                option_values_data = variant_data.pop('option_values', [])
+                
+                if variant_id:
+                    try:
+                        variant = ProductVariant.objects.get(id=variant_id, product=instance)
+                        for attr, value in variant_data.items():
+                            setattr(variant, attr, value)
+                        variant.save()
+                    except ProductVariant.DoesNotExist:
+                        variant = ProductVariant.objects.create(product=instance, **variant_data)
+                else:
+                    variant = ProductVariant.objects.create(product=instance, **variant_data)
+                
+                keep_variants.append(variant.id)
+                
+                variant.option_values.all().delete()
+                for ov_data in option_values_data:
+                    ProductVariantOptionValue.objects.create(variant=variant, **ov_data)
+            
+            instance.variants.exclude(id__in=keep_variants).delete()
+
+        return instance

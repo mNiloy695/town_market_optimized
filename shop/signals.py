@@ -12,7 +12,8 @@ def update_user_status(sender,instance,created,**kwargs):
     if not created and instance.status=='approved':
         user=instance.user
         user.is_request_for_shop="request_approved"
-        user.save(update_fields=['is_request_for_shop'])
+        user.role="seller"
+        user.save(update_fields=['is_request_for_shop','role'])
         instance.shop.status="approved"
         instance.shop.save(update_fields=['status'])
         instance.delete()
@@ -20,7 +21,8 @@ def update_user_status(sender,instance,created,**kwargs):
     if not created and instance.status=='rejected':
         user=instance.user
         user.is_request_for_shop="request_not_requested"
-        user.save(update_fields=['is_request_for_shop'])
+        user.role="buyer"
+        user.save(update_fields=['is_request_for_shop','role'])
         instance.shop.delete()
         instance.delete()
 
@@ -29,4 +31,5 @@ def update_user_status_on_delete(sender, instance, **kwargs):
     if hasattr(instance, 'owner') and instance.owner:
         user = instance.owner
         user.is_request_for_shop = "request_not_requested"
-        user.save(update_fields=['is_request_for_shop'])
+        user.role="buyer"
+        user.save(update_fields=['is_request_for_shop','role'])

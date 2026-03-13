@@ -83,7 +83,7 @@ class ProductCategoryOption(models.Model):
     created_at=models.DateTimeField(auto_now_add=True,null=True,blank=True)
     updated_at=models.DateTimeField(auto_now=True,null=True,blank=True)
     def __str__(self):
-        return self.name
+        return f"{self.product_category.name} - {self.name} -id {self.id}"
     
     def save(self,*args,**kwargs):
         if self.name:
@@ -95,6 +95,8 @@ class ProductCategoryOption(models.Model):
                 counter += 1
             self.slug = slug
         super().save(*args, **kwargs)
+    
+
 
 
 
@@ -104,7 +106,7 @@ class ProductCategoryOptionValue(models.Model):
     created_at=models.DateTimeField(auto_now_add=True,null=True,blank=True)
     updated_at=models.DateTimeField(auto_now=True,null=True,blank=True)
     def __str__(self):
-        return self.value
+        return f"{self.product_category_option.name} - {self.value} -id {self.id}"
 
 
 
@@ -128,6 +130,13 @@ class ProductVariantOptionValue(models.Model):
 
     def __str__(self):
         return f"{self.variant} - {self.option_value.value}"
+
+    def validate_option_value(self):
+        if self.option_value.product_category_option.product_category != self.variant.product.sub_category:
+            raise serializers.ValidationError({"detail": "You are not authorized to create a product because you are not the owner of the shop."})
+        super().validate_option_value()
+
+        
 
 
 
