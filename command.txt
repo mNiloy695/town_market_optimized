@@ -1,0 +1,2 @@
+redis-server --port 6380
+celery -A core worker -l info
