@@ -113,7 +113,7 @@ GENDER=(
 
 class UserProfile(models.Model):
     user=models.OneToOneField(User,on_delete=models.CASCADE,related_name="profile")
-    avatar=models.ImageField(upload_to="media/profile_image",null=True,blank=True)
+    avatar=models.ImageField(upload_to="profile_image",null=True,blank=True)
     name=models.CharField(max_length=100,null=True,blank=True)
     birth_date=models.DateField(null=True,blank=True)
     gender=models.CharField(choices=GENDER,max_length=10,blank=True,null=True)

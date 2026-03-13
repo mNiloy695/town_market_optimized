@@ -19,7 +19,8 @@ class ProductCategorySerializer(serializers.ModelSerializer):
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model=ProductImage
-        fields='__all__'
+        fields = ['id', 'image', 'product']
+        read_only_fields = ['product']
 
 class ProductCategoryOptionValueSerializer(serializers.ModelSerializer):
     
@@ -59,12 +60,13 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(many=True)
+    images = ProductImageSerializer(many=True, required=False)
     shop_data=serializers.SerializerMethodField(read_only=True)
     sub_category_data=serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model=Product
-        fields=['id', 'name', 'slug', 'shop','shop_data','sub_category','sub_category_data', 'variants','created_at','updated_at']
+        fields=['id', 'name', 'slug', 'shop','shop_data','sub_category','sub_category_data', 'variants','images','created_at','updated_at']
         read_only_fields = ['shop','created_at','updated_at']
     def get_shop_data(self,obj):
         return {
@@ -85,21 +87,24 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
     def create(self, validated_data):
-        variants_data = validated_data.pop('variants')
+        variants_data = validated_data.pop('variants', [])
+        images_data = validated_data.pop('images', [])
         product = Product.objects.create(**validated_data)
         
         for variant_data in variants_data:
-            option_values_data = variant_data.pop('option_values')
+            option_values_data = variant_data.pop('option_values', [])
             variant = ProductVariant.objects.create(product=product, **variant_data)
             
             for ov_data in option_values_data:
                 ProductVariantOptionValue.objects.create(variant=variant, **ov_data)
         
+        for image_data in images_data:
+            ProductImage.objects.create(product=product, **image_data)
         return product
 
     def update(self, instance, validated_data):
         variants_data = validated_data.pop('variants', None)
-        
+        images=validated_data.pop('images',None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -129,5 +134,10 @@ class ProductSerializer(serializers.ModelSerializer):
                     ProductVariantOptionValue.objects.create(variant=variant, **ov_data)
             
             instance.variants.exclude(id__in=keep_variants).delete()
+        
+        if images is not None:
+            instance.images.all().delete()
+            for image in images:
+                ProductImage.objects.create(product=instance, **image)
 
         return instance
