@@ -13,6 +13,16 @@ from shop.models import Shop
 from rest_framework import serializers
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
+from django_filters.rest_framework import DjangoFilterBackend 
+from rest_framework.filters import SearchFilter
+
+class ProductPagination(PageNumberPagination):
+    page_size = 20
+    max_page_size = 1000
+    page_size_query_param = 'page_size'
+    page_query_param = 'page'
+
 class ParentProductCategoryListView(generics.ListAPIView):
     queryset=ParentProductCategory.objects.all()
     serializer_class=ParentProductCategorySerializer
@@ -45,6 +55,10 @@ class ProductListView(ModelViewSet):
     queryset=Product.objects.select_related('shop','sub_category').all()
     serializer_class=ProductSerializer
     permission_classes = [CustomProductManagePermission]
+    pagination_class = ProductPagination
+    filter_backends=[DjangoFilterBackend,SearchFilter]
+    filterset_fields=['shop__id']
+    search_fields=['name','sub_category__slug','shop__slug','sub_category__parent__slug']
 
     def perform_create(self, serializer):
         user = self.request.user

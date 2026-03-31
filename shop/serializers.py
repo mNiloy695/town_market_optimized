@@ -15,8 +15,6 @@ class ShopSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ('owner','created_at','updated_at','status','category_data','market_data')
 
-
-    
     def validate_market(self, value):
         request = self.context.get('request')
         if request and request.method in ['PATCH', 'PUT']:
@@ -30,9 +28,6 @@ class ShopSerializer(serializers.ModelSerializer):
                     )
 
         return value
-
-    
-
     
     def get_market_data(self,obj):
         return {

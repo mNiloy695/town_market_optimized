@@ -1,6 +1,34 @@
 from django.dispatch import receiver
-from django.db.models.signals import post_save,post_delete
-from .models import RequestForShop,Shop
+from django.db.models.signals import pre_save, post_save, post_delete
+from .models import RequestForShop, Shop
+
+@receiver(pre_save, sender=Shop)
+def update_shop_status(sender, instance, **kwargs):
+    if instance.status == 'approved':
+        instance.is_active = True
+        instance.is_deactivated = False
+        if hasattr(instance, 'owner'):
+            owner = instance.owner
+            owner.role = "seller"
+            owner.is_request_for_shop = "request_approved"
+            owner.save(update_fields=['role', 'is_request_for_shop'])
+    elif instance.status == 'rejected':
+        instance.is_active = False
+        instance.is_deactivated = True
+        if hasattr(instance, 'owner'):
+            owner = instance.owner
+            owner.role = "buyer"
+            owner.is_request_for_shop = "request_not_requested"
+            owner.save(update_fields=['role', 'is_request_for_shop'])
+    elif instance.status == 'pending':
+        instance.is_active = False
+        instance.is_deactivated = False
+        if hasattr(instance, 'owner'):
+            owner = instance.owner
+            owner.role = "buyer"
+            owner.is_request_for_shop = "request_not_requested"
+            owner.save(update_fields=['role', 'is_request_for_shop'])
+
 
 @receiver(post_save,sender=RequestForShop)
 def update_user_status(sender,instance,created,**kwargs):

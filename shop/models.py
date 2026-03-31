@@ -91,6 +91,11 @@ class Shop(models.Model):
                 slug = f"{base_slug}-{counter}"
                 counter += 1
             self.slug = slug
+
+
+
+    
+
         super().save(*args, **kwargs)
     
     

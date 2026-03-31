@@ -1,5 +1,6 @@
 from django.db import models
 from slugify import slugify
+from django_filters.rest_framework import DjangoFilterBackend
 # Create your models here.
 
 class ParentProductCategory(models.Model):
@@ -59,7 +60,6 @@ class Product(models.Model):
     updated_at=models.DateTimeField(auto_now=True,null=True,blank=True)
     shop=models.ForeignKey('shop.Shop',on_delete=models.CASCADE,related_name='products')
     sub_category=models.ForeignKey(ProductCategory,on_delete=models.CASCADE,related_name='products')
-
 
     def __str__(self):
         return f'{self.name} - {self.id}'

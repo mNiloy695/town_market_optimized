@@ -8,6 +8,9 @@ from rest_framework.viewsets import ModelViewSet
 
 class ShopPagination(PageNumberPagination):
     page_size = 20
+    max_page_size = 1000
+    page_size_query_param = 'page_size'
+    page_query_param = 'page'
 
 class CustomPermissionForShop(permissions.BasePermission):
     def has_permission(self,request,view):
