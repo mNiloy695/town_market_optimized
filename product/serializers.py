@@ -63,10 +63,11 @@ class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, required=False)
     shop_data=serializers.SerializerMethodField(read_only=True)
     sub_category_data=serializers.SerializerMethodField(read_only=True)
+    available_options = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model=Product
-        fields=['id', 'name', 'slug', 'shop','shop_data','sub_category','sub_category_data', 'variants','images','created_at','updated_at']
+        fields=['id', 'name', 'slug', 'shop','shop_data','sub_category','sub_category_data', 'variants','images','available_options','created_at','updated_at']
         read_only_fields = ['shop','created_at','updated_at']
     def get_shop_data(self,obj):
         return {
@@ -78,6 +79,22 @@ class ProductSerializer(serializers.ModelSerializer):
             "sub_category_name":obj.sub_category.name,
             "sub_category_id":obj.sub_category.id,
         }
+    def get_available_options(self, obj):
+        variants = obj.variants.filter(stock__gt=0)
+        options = {}
+        for variant in variants:
+            for ov in variant.option_values.all():
+                option_name = ov.option_value.product_category_option.name
+                value = ov.option_value.value
+                value_id = ov.option_value.id
+                if option_name not in options:
+                    options[option_name] = {}
+                options[option_name][value] = value_id
+        # Convert to list of dicts
+        result = {}
+        for opt_name, val_dict in options.items():
+            result[opt_name] = [{"id": vid, "value": val} for val, vid in val_dict.items()]
+        return result
 
     def validate(self, attrs):
         if self.instance:

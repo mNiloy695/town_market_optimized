@@ -1,6 +1,8 @@
 from django.db import models
 from slugify import slugify
-from django_filters.rest_framework import DjangoFilterBackend
+
+from shop import serializers
+
 # Create your models here.
 
 class ParentProductCategory(models.Model):
@@ -131,11 +133,7 @@ class ProductVariantOptionValue(models.Model):
     def __str__(self):
         return f"{self.variant} - {self.option_value.value}"
 
-    def validate_option_value(self):
-        if self.option_value.product_category_option.product_category != self.variant.product.sub_category:
-            raise serializers.ValidationError({"detail": "You are not authorized to create a product because you are not the owner of the shop."})
-        super().validate_option_value()
-
+    
         
 
 
