@@ -80,6 +80,7 @@ This system implements a robust product variant management, option selection, an
 2. **GET /v1/cart/detail/**
    - Returns user's cart with items, total price
    - Response includes `total` (sum of item prices * quantities)
+   - Each item includes `is_available` (true if stock >= quantity)
 
 ## Frontend Flow
 

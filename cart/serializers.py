@@ -15,12 +15,14 @@ class CartItemSerializer(serializers.ModelSerializer):
         image_url = None
         if obj.product_variant.product.images.exists():
             image_url = obj.product_variant.product.images.first().image.url
+        is_available = obj.product_variant.stock >= obj.quantity
         return {
             'id': obj.product_variant.id,
             'price': obj.product_variant.price,
             'stock': obj.product_variant.stock,
             'description': obj.product_variant.description,
             'image': image_url,
+            'is_available': is_available,
         }
 
 class CartSerializer(serializers.ModelSerializer):
@@ -37,18 +39,12 @@ class CartSerializer(serializers.ModelSerializer):
 
 
 class AddToCartSerializer(serializers.Serializer):
-    variant_id = serializers.CharField(required=False)
-    quantity = serializers.IntegerField(required=False, min_value=1)
+    variant_id = serializers.IntegerField()
+    quantity = serializers.IntegerField(min_value=1)
 
-    def validate(self, attrs):
-        variant_id = attrs.get('variant_id')
-        quantity = attrs.get('quantity')
-        if not variant_id:
-            raise serializers.ValidationError({"error": "Product variant ID is required."})
-        if quantity is None:
-            raise serializers.ValidationError({"error": "Quantity is required."})
+    def validate_variant_id(self, value):
         try:
-            self.variant = ProductVariant.objects.get(id=variant_id)
+            self.variant = ProductVariant.objects.get(id=value)
         except ProductVariant.DoesNotExist:
-            raise serializers.ValidationError({"error": "Product variant does not exist."})
-        return attrs
+            raise serializers.ValidationError("Product variant does not exist.")
+        return value
