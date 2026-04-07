@@ -20,6 +20,7 @@ class AddToCartView(APIView):
 
         if variant.stock < quantity:
             return Response({'error': 'Not enough stock.'}, status=status.HTTP_400_BAD_REQUEST)
+
         cart, _ = Cart.objects.get_or_create(user=request.user)
         cart_item, created = CartItem.objects.get_or_create(cart=cart, product_variant=variant)
         if not created:
@@ -28,6 +29,50 @@ class AddToCartView(APIView):
             cart_item.quantity = quantity
         cart_item.save()
         return Response(CartItemSerializer(cart_item).data, status=status.HTTP_201_CREATED)
+    
+
+class RemoveFromCartView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, variant_id):
+        cart = get_object_or_404(Cart, user=request.user)
+        cart_item = get_object_or_404(
+            CartItem,
+            cart=cart,
+            product_variant_id=variant_id
+        )
+        cart_item.delete()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    
+
+class IncrementOrDecrementCartItemView(APIView):
+    permission_classes=[IsAuthenticated]
+    def patch(self,request,variant_id):
+        cart=get_object_or_404(Cart,user=request.user)
+        cart_item=get_object_or_404(CartItem,cart=cart,product_variant_id=variant_id)
+        quantity=request.data.get('quantity', 1)
+        
+        if not isinstance(quantity, int) or quantity <= 0:
+            return Response({'error': 'Quantity must be a positive integer.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        action=request.data.get('type')
+        
+        if action not in ['increment','decrement']:
+            return Response({'error':'Invalid type. Must be "increment" or "decrement".'},status=status.HTTP_400_BAD_REQUEST)
+        if action=='increment':
+            if cart_item.product_variant.stock < cart_item.quantity + quantity:
+                return Response({'error': 'Not enough stock.'}, status=status.HTTP_400_BAD_REQUEST)
+            cart_item.quantity+=quantity
+            cart_item.save()
+        else:
+            if cart_item.quantity-quantity<=0:
+                cart_item.delete()
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            cart_item.quantity-=quantity
+            cart_item.save()
+        return Response({"message":"Cart item updated successfully.","cart_item": CartItemSerializer(cart_item).data},status=status.HTTP_200_OK)
 
 
 class CartDetailView(APIView):
@@ -37,3 +82,5 @@ class CartDetailView(APIView):
 		cart, _ = Cart.objects.get_or_create(user=request.user)
 		serializer = CartSerializer(cart)
 		return Response(serializer.data)
+
+

@@ -116,12 +116,18 @@ class ProductVariant(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
     price = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True, null=True)
-    stock=models.IntegerField()
+    stock = models.IntegerField()  # Actual available inventory
+    reserved_quantity = models.IntegerField(default=0)  # Reserved by pending orders
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     def __str__(self):
         return f"{self.product.name} - Variant {self.id}"
+    
+    @property
+    def available_stock(self):
+        """Return stock available for purchase (excluding reserved)"""
+        return self.stock - self.reserved_quantity
 
 class ProductVariantOptionValue(models.Model):
     variant = models.ForeignKey(ProductVariant, on_delete=models.CASCADE, related_name='option_values')
