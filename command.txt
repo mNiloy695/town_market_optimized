@@ -1,2 +1,24 @@
 redis-server --port 6380
 celery -A core worker -l info
+
+# Auto-Order Cancellation System Commands
+# ======================================
+
+# Start Celery Beat (Scheduler) - runs periodic tasks
+celery -A core beat -l info
+
+# Alternative: Run auto-cancellation manually
+python manage.py cancel_expired_orders
+
+# Full setup: Run all services
+# Terminal 1: Redis
+redis-server --port 6380
+# Terminal 2: Celery Worker
+celery -A core worker -l info
+# Terminal 3: Celery Beat
+celery -A core beat -l info
+# Terminal 4: Django Server
+python manage.py runserver
+
+# Cron job alternative (add to crontab):
+# */15 * * * * /path/to/venv/bin/python /path/to/project/manage.py cancel_expired_orders

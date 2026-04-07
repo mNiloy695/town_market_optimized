@@ -145,7 +145,7 @@ ProductVariant:
 Next customer cannot purchase these 2 items until:
 - Payment confirmed (becomes actual stock deduction)
 - Order cancelled (reservation released)
-- 24 hours timeout (auto-release pending orders)
+- Auto-cancelled after 1 hour (reservation released)
 ```
 
 ---
@@ -413,24 +413,32 @@ if order.status == 'confirmed':
 
 ## Timeout Handling
 
-**Auto-Release Pending Orders** (24 hours)
+**Auto-Release Pending Orders** (1 hour)
 
-Cron job runs hourly:
+Celery task runs every 15 minutes:
 ```python
-# Release reservations for orders pending > 24 hours
-pending_orders = Order.objects.filter(
+# Find orders older than 1 hour
+expired_orders = Order.objects.filter(
     status='pending_payment',
-    created_at__lt=timezone.now() - timedelta(hours=24)
+    created_at__lt=timezone.now() - timedelta(hours=1),
+    is_paid=False
 )
 
-for order in pending_orders:
-    for shop_order in order.shop_orders.filter(status='pending'):
-        for item in shop_order.items.all():
-            item.product_variant.reserved_quantity -= item.quantity
-            item.product_variant.save()
-        
-        shop_order.status = 'cancelled'
-        shop_order.save()
+# Cancel orders and release reserved stock
+for order in expired_orders:
+    # Release reservations: reserved_quantity -= quantity
+    # Cancel shop orders: status = 'cancelled'
+    # Add timeline: 'Order auto-cancelled due to payment timeout'
+```
+
+**Alternative: Manual Command**
+```bash
+python manage.py cancel_expired_orders
+```
+
+**Cron Job Example:**
+```bash
+*/15 * * * * /path/to/venv/bin/python /path/to/project/manage.py cancel_expired_orders
 ```
 
 ---
@@ -597,7 +605,8 @@ ProductVariant
 ### Payment Failure Path
 1. Checkout → pending_payment, stock reserved
 2. Payment failed → order stays pending_payment
-3. After 24 hours → auto-cancelled, stock released
+3. After 1 hour → auto-cancelled, stock released
+4. Next customer can now order
 
 ### Return Path
 1. Order delivered
