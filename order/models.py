@@ -12,8 +12,10 @@ class Order(models.Model):
     Each order represents a transaction from a customer.
     """
     ORDER_STATUS_CHOICES = [
-        ('confirmed', 'Confirmed'),
+        ('payment_confirmed', 'Payment Confirmed'),
         ('pending_payment', 'Pending Payment'),
+        ('processing', 'Processing'),
+        ('failed', 'Failed'),
         ('cancelled', 'Cancelled'),
     ]
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='orders')
@@ -77,7 +79,7 @@ class Order(models.Model):
         
         with transaction.atomic():
             self.is_paid = True
-            self.status = 'confirmed'
+            self.status = 'payment_confirmed'
             self.save()
             
             # For each shop order, reduce actual stock
