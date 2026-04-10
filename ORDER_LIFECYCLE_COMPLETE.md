@@ -90,7 +90,7 @@ RETURN APPROVED
     "shipping_postal_code": "75001",
     "shipping_country": "Pakistan",
     "phone_number": "+92 300 1234567",
-    "payment_method": "cash_on_delivery"
+    "payment_method": "sslcommerz"
 }
 ```
 

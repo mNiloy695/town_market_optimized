@@ -151,50 +151,25 @@ class PaymentGateway:
     """
     
     @staticmethod
-    def initiate_payment(order, payment_method='card'):
+    def initiate_payment(order, payment_method='sslcommerz'):
         """
-        Initiate payment processing
+        Initiate SSLCommerz payment processing
         Returns: {'success': bool, 'transaction_id': str, 'message': str}
         """
         
-        if payment_method == 'cash_on_delivery':
+        if payment_method == 'sslcommerz':
+            # SSLCommerz is handled via redirected payment
             return {
                 'success': True,
-                'transaction_id': None,
-                'message': 'Cash on delivery confirmed'
+                'transaction_id': f'SSL-{order.id}',
+                'message': 'SSLCommerz session initiated'
             }
         
-        elif payment_method == 'card':
-            # Example: Stripe integration
-            # import stripe
-            # try:
-            #     intent = stripe.PaymentIntent.create(
-            #         amount=int(order.total_amount * 100),
-            #         currency='pkr',
-            #         metadata={'order_id': order.id}
-            #     )
-            #     return {
-            #         'success': True,
-            #         'transaction_id': intent.id,
-            #         'message': 'Payment initiated'
-            #     }
-            # except stripe.error.CardError as e:
-            #     return {
-            #         'success': False,
-            #         'transaction_id': None,
-            #         'message': f'Card declined: {e.user_message}'
-            #     }
-            pass
-        
-        elif payment_method == 'wallet':
-            # Deduct from user's wallet
-            # user.wallet_balance -= order.total_amount
-            # user.save()
-            return {
-                'success': True,
-                'transaction_id': f'WALLET-{order.id}',
-                'message': 'Deducted from wallet'
-            }
+        return {
+            'success': False,
+            'transaction_id': None,
+            'message': 'Unsupported payment method. Only SSLCommerz is allowed.'
+        }
     
     @staticmethod
     def verify_payment(transaction_id):
@@ -378,7 +353,7 @@ class OrderTestFactory:
             shipping_address='123 Test Street',
             shipping_city='Test City',
             phone_number='+92 300 1234567',
-            payment_method='cash_on_delivery'
+            payment_method='sslcommerz'
         )
         
         # This is a simplified example

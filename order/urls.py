@@ -12,7 +12,8 @@ from .views import (
     CustomerOrderCancel,
     PaymentConfirmationView,
     OrderReturnRequestView,
-    VendorReturnApprovalView
+    VendorReturnApprovalView,
+    PayNowView
 )
 
 app_name = 'order'
@@ -22,6 +23,7 @@ urlpatterns = [
     path('checkout/', CheckoutView.as_view(), name='checkout'),
     path('list/', OrderListView.as_view(), name='order-list'),
     path('<int:order_id>/', OrderDetailView.as_view(), name='order-detail'),
+    path('<int:order_id>/pay-now/', PayNowView.as_view(), name='order-pay-now'),
     # path('<int:order_id>/confirm-payment/', PaymentConfirmationView.as_view(), name='confirm-payment'),
     # path('shop-order/<int:shop_order_id>/cancel/', CustomerOrderCancel.as_view(), name='cancel-order'),
     # path('shop-order/<int:shop_order_id>/return/', OrderReturnRequestView.as_view(), name='request-return'),

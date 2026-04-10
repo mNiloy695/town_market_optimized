@@ -45,7 +45,7 @@ class CheckoutView(APIView):
             "shipping_postal_code": "75001",
             "shipping_country": "Pakistan",
             "phone_number": "+92 300 1234567",
-            "payment_method": "cash_on_delivery"
+            "payment_method": "sslcommerz"
         }
         """
         serializer = CheckoutSerializer(data=request.data, context={'request': request})
@@ -114,19 +114,84 @@ class CheckoutView(APIView):
                 # Clear cart
                 cart.items.all().delete()
                 
-                return Response(
-                    {
-                        'message': 'Order created successfully',
-                        'order': OrderDetailSerializer(order, context={'request': request}).data
-                    },
-                    status=status.HTTP_201_CREATED
-                )
+                # Initiate SSLCommerz Payment
+                payment_response = self._initiate_sslcommerz_payment(request, order)
+                
+                if payment_response.get('status') == 'SUCCESS':
+                    return Response(
+                        {
+                            'message': 'Order created successfully',
+                            'payment_url': payment_response.get('GatewayPageURL'),
+                            'order': OrderDetailSerializer(order, context={'request': request}).data
+                        },
+                        status=status.HTTP_201_CREATED
+                    )
+                else:
+                    # If payment initiation fails, we still have the order in 'pending_payment'
+                    return Response(
+                        {
+                            'message': 'Order created but payment initiation failed',
+                            'error': payment_response.get('failedreason'),
+                            'order': OrderDetailSerializer(order, context={'request': request}).data
+                        },
+                        status=status.HTTP_201_CREATED
+                    )
         
         except Exception as e:
             return Response(
                 {'error': f'Checkout failed: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    def _initiate_sslcommerz_payment(self, request, order):
+        """Initiate payment with SSLCommerz"""
+        import requests
+        from django.conf import settings
+        from django.urls import reverse
+
+        base_url = f"{request.scheme}://{request.get_host()}"
+        webhook_url = base_url + reverse('order:sslcommerz-webhook')
+        
+        # Sanitize customer name (limit to 30 chars, remove special chars)
+        cus_name = request.user.phone or "Customer"
+        if hasattr(request.user, 'get_full_name') and request.user.get_full_name():
+            cus_name = request.user.get_full_name()
+        
+        # Simple sanitization
+        cus_name = ''.join(e for e in cus_name if e.isalnum() or e.isspace())[:30]
+
+        post_data = {
+            'store_id': settings.STORE_ID,
+            'store_passwd': settings.STORE_PASSWORD,
+            'total_amount': float(order.total_amount),
+            'currency': 'BDT',
+            'tran_id': order.order_number,
+            'success_url': webhook_url,
+            'fail_url': webhook_url,
+            'cancel_url': webhook_url,
+            'ipn_url': webhook_url,
+            'cus_name': cus_name,
+            'cus_email': getattr(request.user, 'email', 'customer@example.com'),
+            'cus_add1': order.shipping_address[:50],
+            'cus_city': order.shipping_city[:30],
+            'cus_postcode': order.shipping_postal_code[:10],
+            'cus_country': order.shipping_country[:30],
+            'cus_phone': order.phone_number[:15],
+            'shipping_method': 'NO',
+            'product_name': f"Order {order.order_number}"[:50],
+            'product_category': 'General',
+            'product_profile': 'general',
+        }
+
+        try:
+            response = requests.post(
+                "https://sandbox.sslcommerz.com/gwprocess/v4/api.php",
+                data=post_data,
+                timeout=15
+            )
+            return response.json()
+        except Exception as e:
+            return {'status': 'FAILED', 'failedreason': str(e)}
     
     def _group_items_by_shop(self, cart):
         """Group cart items by shop"""
@@ -395,25 +460,8 @@ class CustomerOrderCancel(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Release reserved stock
-        for item in shop_order.items.all():
-            if shop_order.status == 'pending':
-                # Release reservation
-                item.product_variant.reserved_quantity -= item.quantity
-            else:
-                # Restore actual stock if already reduced (confirmed orders)
-                item.product_variant.stock += item.quantity
-            item.product_variant.save()
-        
-        shop_order.status = 'cancelled'
-        shop_order.save()
-        
-        OrderTimeline.objects.create(
-            shop_order=shop_order,
-            action='cancelled',
-            description='Order cancelled by customer',
-            created_by=request.user
-        )
+        # Use the centralized fail_order logic to handle status and stock release
+        shop_order.order.fail_order(reason='Order cancelled by customer')
         
         return Response(
             {'message': 'Order cancelled successfully'},
@@ -635,4 +683,34 @@ class VendorReturnApprovalView(APIView):
                 {'error': f'Return approval failed: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class PayNowView(APIView):
+    """
+    Endpoint to re-initiate payment for an existing pending order.
+    Useful if initial payment failed or user closed the payment page.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, order_id):
+        order = get_object_or_404(Order, id=order_id, user=request.user)
+
+        if order.status != 'pending_payment' or order.is_paid:
+            return Response(
+                {'error': f'Order is already {order.status} or paid.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Use an instance to call the internal method
+        checkout_view = CheckoutView()
+        payment_response = checkout_view._initiate_sslcommerz_payment(request, order)
+
+        if payment_response.get('status') == 'SUCCESS':
+            return Response({
+                'payment_url': payment_response.get('GatewayPageURL')
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'error': payment_response.get('failedreason', 'Could not initiate payment')
+            }, status=status.HTTP_400_BAD_REQUEST)
 

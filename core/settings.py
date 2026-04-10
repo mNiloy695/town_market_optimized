@@ -100,6 +100,11 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
+
+#Marchent settings
+STORE_ID = config('STORE_ID')
+STORE_PASSWORD = config('STORE_PASSWORD')
+
 # Celery Beat settings for periodic tasks
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {

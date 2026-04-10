@@ -25,7 +25,7 @@ Represents a complete purchase by a customer.
 - status → choice (confirmed, pending_payment, cancelled)
 - shipping_address, city, postal_code, country → str
 - phone_number → str
-- payment_method → choice (cash_on_delivery, card, wallet)
+- payment_method
 - is_paid → bool
 - created_at, updated_at → datetime
 ```
@@ -106,7 +106,7 @@ Request:
     "shipping_postal_code": "75001",
     "shipping_country": "Pakistan",
     "phone_number": "+92 300 1234567",
-    "payment_method": "cash_on_delivery"
+    "payment_method": "sslcommerz"
     // or "card", "wallet"
 }
 

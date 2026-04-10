@@ -88,7 +88,7 @@ curl -X POST http://localhost:8000/api/order/checkout/ \
     "shipping_postal_code": "75001",
     "shipping_country": "Pakistan",
     "phone_number": "+92 300 1234567",
-    "payment_method": "cash_on_delivery"
+    "payment_method": "sslcommerz"
   }'
 
 # List orders
@@ -140,7 +140,7 @@ checkout_data = {
     "shipping_postal_code": "75001",
     "shipping_country": "Pakistan",
     "phone_number": "+92 300 1234567",
-    "payment_method": "cash_on_delivery"
+    "payment_method": "sslcommerz"
 }
 
 response = requests.post(
@@ -262,7 +262,7 @@ class CheckoutTestCase(TestCase):
             'shipping_postal_code': '75001',
             'shipping_country': 'Pakistan',
             'phone_number': '+92 300 1234567',
-            'payment_method': 'cash_on_delivery'
+            'payment_method': 'sslcommerz'
         }
         
         response = self.client.post('/api/order/checkout/', data, format='json')
@@ -280,7 +280,7 @@ class CheckoutTestCase(TestCase):
             'shipping_postal_code': '75001',
             'shipping_country': 'Pakistan',
             'phone_number': '+92 300 1234567',
-            'payment_method': 'cash_on_delivery'
+            'payment_method': 'sslcommerz'
         }
         
         response = self.client.post('/api/order/checkout/', data, format='json')
@@ -300,7 +300,7 @@ class CheckoutTestCase(TestCase):
             'shipping_postal_code': '75001',
             'shipping_country': 'Pakistan',
             'phone_number': '+92 300 1234567',
-            'payment_method': 'cash_on_delivery'
+            'payment_method': 'sslcommerz'
         }
         
         response = self.client.post('/api/order/checkout/', data, format='json')
@@ -318,7 +318,7 @@ class CheckoutTestCase(TestCase):
             'shipping_postal_code': '75001',
             'shipping_country': 'Pakistan',
             'phone_number': '+92 300 1234567',
-            'payment_method': 'cash_on_delivery'
+            'payment_method': 'sslcommerz'
         }
         
         response = self.client.post('/api/order/checkout/', data, format='json')
@@ -338,7 +338,7 @@ class CheckoutTestCase(TestCase):
             'shipping_postal_code': '75001',
             'shipping_country': 'Pakistan',
             'phone_number': '+92 300 1234567',
-            'payment_method': 'cash_on_delivery'
+            'payment_method': 'sslcommerz'
         }
         
         response = self.client.post('/api/order/checkout/', data, format='json')
@@ -357,7 +357,7 @@ class CheckoutTestCase(TestCase):
             'shipping_postal_code': '75001',
             'shipping_country': 'Pakistan',
             'phone_number': '+92 300 1234567',
-            'payment_method': 'cash_on_delivery'
+            'payment_method': 'sslcommerz'
         }
         
         response = self.client.post('/api/order/checkout/', data, format='json')

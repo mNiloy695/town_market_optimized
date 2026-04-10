@@ -152,7 +152,7 @@ POST /api/order/checkout/
     "shipping_postal_code": "75001",
     "shipping_country": "Pakistan",
     "phone_number": "+92 300 1234567",
-    "payment_method": "cash_on_delivery"  # or "card", "wallet"
+    "payment_method": "sslcommerz"
 }
 
 Response:

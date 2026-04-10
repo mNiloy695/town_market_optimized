@@ -1,4 +1,5 @@
-from rest_framework import serializers
+from rest_framework import serializers, status
+from rest_framework.exceptions import APIException
 from django.db import transaction
 from .models import Order, ShopOrder, OrderItem, OrderTimeline
 from cart.models import Cart, CartItem
@@ -131,8 +132,8 @@ class CheckoutSerializer(serializers.Serializer):
     
     # Payment information
     payment_method = serializers.ChoiceField(
-        choices=['cash_on_delivery', 'card', 'wallet'],
-        default='cash_on_delivery'
+        choices=['sslcommerz'],
+        default='sslcommerz'
     )
     
     def validate(self, data):
@@ -170,15 +171,24 @@ class VendorOrderStatsSerializer(serializers.Serializer):
     average_order_value = serializers.DecimalField(max_digits=12, decimal_places=2)
 
 
+class BadRequest(APIException):
+    status_code = status.HTTP_400_BAD_REQUEST
+
+
 class ShopOrderStatusUpdateSerializer(serializers.ModelSerializer):
     """For vendor to update order status"""
     class Meta:
         model = ShopOrder
         fields = ['status', 'tracking_number', 'notes']
     
-    def validate_status(self, value):
+    def validate(self, data):
         """Validate status transitions"""
         instance = self.instance
+        value = data.get('status')
+        
+        if not value:
+            return data
+
         valid_transitions = {
             'pending': ['confirmed', 'cancelled'],
             'confirmed': ['processing', 'cancelled'],
@@ -192,8 +202,8 @@ class ShopOrderStatusUpdateSerializer(serializers.ModelSerializer):
         
         if instance and instance.status in valid_transitions:
             if value not in valid_transitions[instance.status]:
-                raise serializers.ValidationError(
-                    f"Cannot transition from {instance.status} to {value}"
+                raise BadRequest(
+                   {"error": f"Invalid status transition from {instance.status} to {value}"}
                 )
         
-        return value
+        return data

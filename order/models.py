@@ -6,13 +6,20 @@ from shop.models import Shop
 from product.models import ProductVariant
 
 
+SHIPPING_CITY=(
+    ("feni","Feni"),
+)
+
+SHIPPING_UPAZILLA=(
+    
+)
 class Order(models.Model):
     """
     Master order model for a customer.
     Each order represents a transaction from a customer.
     """
     ORDER_STATUS_CHOICES = [
-        ('payment_confirmed', 'Payment Confirmed'),
+        ('confirmed', 'Confirmed'),
         ('pending_payment', 'Pending Payment'),
         ('processing', 'Processing'),
         ('failed', 'Failed'),
@@ -41,11 +48,9 @@ class Order(models.Model):
     payment_method = models.CharField(
         max_length=50,
         choices=[
-            ('cash_on_delivery', 'Cash on Delivery'),
-            ('card', 'Card Payment'),
-            ('wallet', 'Wallet'),
+            ('sslcommerz', 'SSLCommerz Payment'),
         ],
-        default='cash_on_delivery'
+        default='sslcommerz'
     )
     is_paid = models.BooleanField(default=False)
     
@@ -79,7 +84,7 @@ class Order(models.Model):
         
         with transaction.atomic():
             self.is_paid = True
-            self.status = 'payment_confirmed'
+            self.status = 'confirmed'
             self.save()
             
             # For each shop order, reduce actual stock
@@ -103,6 +108,35 @@ class Order(models.Model):
                     description='Payment confirmed - stock reserved',
                     created_by=self.user
                 )
+
+    def fail_order(self, reason=None):
+        """
+        Handle payment failure and release reserved stock immediately.
+        """
+        from django.db import transaction
+        
+        with transaction.atomic():
+            # Only process if not already finalized
+            if self.status not in ['confirmed', 'cancelled', 'failed']:
+                self.status = 'failed'
+                self.save()
+                
+                # Release reserved stock for all associated shop orders
+                for shop_order in self.shop_orders.filter(status='pending'):
+                    for item in shop_order.items.all():
+                        item.product_variant.reserved_quantity -= item.quantity
+                        item.product_variant.save()
+                    
+                    shop_order.status = 'cancelled'
+                    shop_order.save()
+                    
+                    # Log to timeline
+                    from .models import OrderTimeline
+                    OrderTimeline.objects.create(
+                        shop_order=shop_order,
+                        action='cancelled',
+                        description=reason or 'Payment failed - reserved stock released',
+                    )
 
 
 class ShopOrder(models.Model):

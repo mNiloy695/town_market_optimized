@@ -5,6 +5,7 @@ from .models import Order
 from .serializers import OrderDetailSerializer as OrderSerializer
 import requests
 from rest_framework.permissions import AllowAny  
+from django.conf import settings
 class IpnViewWebhookSSLCommerze(APIView):
     # permission_classes = [AllowAny]  
 
@@ -36,9 +37,7 @@ class IpnViewWebhookSSLCommerze(APIView):
             validation = self.validate_payment(val_id)
 
             if not validation or validation.get('status') != 'VALID':
-                order.is_paid = False
-                order.status = 'failed'
-                order.save()
+                order.fail_order(reason='SSLCommerz validation failed')
                 return Response(
                     {'error': 'Validation failed'},
                     status=http_status.HTTP_400_BAD_REQUEST
@@ -48,9 +47,7 @@ class IpnViewWebhookSSLCommerze(APIView):
             real_currency = validation.get('currency', '')
 
             if real_amount != float(amount) or real_currency != currency:
-                order.is_paid = False
-                order.status = 'failed'
-                order.save()
+                order.fail_order(reason='Payment amount/currency mismatch')
                 return Response(
                     {'error': 'Amount or currency mismatch!'},
                     status=http_status.HTTP_400_BAD_REQUEST
@@ -63,18 +60,8 @@ class IpnViewWebhookSSLCommerze(APIView):
             return Response(serializer.data, status=http_status.HTTP_200_OK)
 
         
-        elif payment_status == 'FAILED':
-            order.is_paid = False
-            order.status = 'failed'
-            order.save()
-            serializer = OrderSerializer(order)
-            return Response(serializer.data, status=http_status.HTTP_200_OK)
-
-        
-        elif payment_status == 'CANCELLED':
-            order.is_paid = False
-            order.status = 'cancelled'
-            order.save()
+        elif payment_status in ['FAILED', 'CANCELLED']:
+            order.fail_order(reason=f'Payment {payment_status} via SSLCommerz')
             serializer = OrderSerializer(order)
             return Response(serializer.data, status=http_status.HTTP_200_OK)
 
@@ -87,8 +74,8 @@ class IpnViewWebhookSSLCommerze(APIView):
         validation_url = "https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php"
         params = {
             'val_id': val_id,
-            'store_id': 'salah69d86c586754c',
-            'store_passwd': 'salah69d86c586754c@ssl',
+            'store_id':settings.STORE_ID,
+            'store_passwd': settings.STORE_PASSWORD,
             'format': 'json'
         }
         try:

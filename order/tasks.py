@@ -28,31 +28,7 @@ def cancel_expired_pending_orders():
     for order in expired_orders:
         try:
             with transaction.atomic():
-                # Get all shop orders for this order
-                shop_orders = order.shop_orders.filter(status='pending')
-                
-                for shop_order in shop_orders:
-                    # Release reserved stock for each item
-                    for item in shop_order.items.all():
-                        item.product_variant.reserved_quantity -= item.quantity
-                        item.product_variant.save()
-                        stock_released += item.quantity
-                    
-                    # Cancel the shop order
-                    shop_order.status = 'cancelled'
-                    shop_order.save()
-                    
-                    # Add timeline entry
-                    OrderTimeline.objects.create(
-                        shop_order=shop_order,
-                        action='cancelled',
-                        description='Order auto-cancelled due to payment timeout (1 hour)',
-                        created_by=None  # System action
-                    )
-                
-                # Update master order status
-                order.status = 'cancelled'
-                order.save()
+                order.fail_order(reason='Order auto-cancelled due to payment timeout (1 hour)')
                 
                 cancelled_count += 1
                 

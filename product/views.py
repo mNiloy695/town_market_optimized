@@ -160,3 +160,19 @@ class FindVariantView(generics.GenericAPIView):
 
 
 
+
+class MyShopProductView(generics.ListAPIView):
+    queryset=Product.objects.select_related('shop','sub_category').prefetch_related('variants__option_values__option_value__product_category_option', 'images').all()
+    serializer_class=ProductSerializer
+    permission_classes=[permissions.IsAuthenticated]
+    pagination_class = ProductPagination
+    filter_backends=[SearchFilter]
+    search_fields=['name','sub_category__slug','shop__slug','sub_category__parent__slug','slug']
+    
+
+    def get_queryset(self):
+        user = self.request.user
+        shop = Shop.objects.filter(owner=user).first()
+        if not shop:
+            return Product.objects.none()
+        return Product.objects.filter(shop=shop)
