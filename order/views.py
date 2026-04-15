@@ -420,7 +420,7 @@ class VendorDashboardStatsView(APIView):
             )
         
         shop_orders = ShopOrder.objects.filter(shop=shop)
-        need_to_pay_commission_to_the_platform = shop_orders.filter(status='delivered',commission_given=False).aggregate(Sum('total'))['total__sum'] or 0
+        need_to_pay_commission_to_the_platform = shop_orders.filter(status='delivered',commission_given=False).aggregate(Sum('total'))['total__sum']*10/100 or 0
         print(need_to_pay_commission_to_the_platform)
         
         # Calculate statistics
