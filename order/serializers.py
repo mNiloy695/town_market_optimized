@@ -4,6 +4,7 @@ from django.db import transaction
 from .models import Order, ShopOrder, OrderItem, OrderTimeline
 from cart.models import Cart, CartItem
 from product.models import ProductVariant
+from product.serializers import ProductVariantSerializer
 from shop.models import Shop
 from accounts.models import CustomUser
 
@@ -14,12 +15,13 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
     product_image = serializers.SerializerMethodField()
     shop_name = serializers.CharField(source='product_variant.product.shop.name', read_only=True)
+    product_variant_data = ProductVariantSerializer(source='product_variant', read_only=True)
     
     class Meta:
         model = OrderItem
         fields = [
             'id', 'product_variant', 'product_name', 'product_image',
-            'shop_name', 'price_at_purchase', 'quantity', 'line_total', 'status'
+            'shop_name', 'price_at_purchase', 'quantity', 'line_total', 'status','product_variant_data'
         ]
         read_only_fields = ['id', 'price_at_purchase', 'line_total']
     
@@ -88,9 +90,11 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
         return obj.get_order_number()
 
 
+
 class OrderDetailSerializer(serializers.ModelSerializer):
     """Detailed order serializer for customers"""
     shop_orders = ShopOrderDetailSerializer(many=True, read_only=True)
+    
     
     class Meta:
         model = Order
@@ -141,6 +145,14 @@ class CheckoutSerializer(serializers.Serializer):
         request = self.context.get('request')
         if not request:
             raise serializers.ValidationError("Request context is required")
+
+        shipping_address = data.get('shipping_address',None)
+        shipping_city = data.get('shipping_city',None)
+        shipping_postal_code = data.get('shipping_postal_code',None)
+        shipping_country = data.get('shipping_country',None)
+        phone_number = data.get('phone_number',None)
+        if not (shipping_address and shipping_city and shipping_country and shipping_postal_code and phone_number):
+            raise serializers.ValidationError({"error":"shipping address, city, postal code, country and phone number are required"})        
         
         try:
             cart = Cart.objects.get(user=request.user)

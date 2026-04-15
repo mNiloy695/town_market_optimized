@@ -185,7 +185,7 @@ class ShopOrder(models.Model):
     # Tracking
     tracking_number = models.CharField(max_length=100, blank=True)
     notes = models.TextField(blank=True, help_text=f'Shop\'s internal notes')
-    
+    comission_given = models.BooleanField(default=False)  # Track if commission has been given by the shop owner to the platform  
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)

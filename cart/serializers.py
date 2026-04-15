@@ -1,29 +1,30 @@
 from rest_framework import serializers
 from .models import Cart, CartItem
 from product.models import ProductVariant
+from product.serializers import ProductVariantSerializer
 
 class CartItemSerializer(serializers.ModelSerializer):
     product_variant = serializers.PrimaryKeyRelatedField(queryset=ProductVariant.objects.all())
-    product_variant_data = serializers.SerializerMethodField()
+    product_variant_data = ProductVariantSerializer(source="product_variant", read_only=True)
 
     class Meta:
         model = CartItem
         fields = ['id', 'cart', 'product_variant', 'product_variant_data', 'quantity', 'added_at', 'updated_at']
         read_only_fields = ['cart', 'added_at', 'updated_at']
 
-    def get_product_variant_data(self, obj):
-        image_url = None
-        if obj.product_variant.product.images.exists():
-            image_url = obj.product_variant.product.images.first().image.url
-        is_available = obj.product_variant.stock >= obj.quantity
-        return {
-            'id': obj.product_variant.id,
-            'price': obj.product_variant.price,
-            'stock': obj.product_variant.stock,
-            'description': obj.product_variant.description,
-            'image': image_url,
-            'is_available': is_available,
-        }
+    # def get_product_variant_data(self, obj):
+    #     image_url = None
+    #     if obj.product_variant.product.images.exists():
+    #         image_url = obj.product_variant.product.images.first().image.url
+    #     is_available = obj.product_variant.stock >= obj.quantity
+    #     return {
+    #         'id': obj.product_variant.id,
+    #         'price': obj.product_variant.price,
+    #         'stock': obj.product_variant.stock,
+    #         'description': obj.product_variant.description,
+    #         'image': image_url,
+    #         'is_available': is_available,
+    #     }
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
