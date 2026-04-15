@@ -63,7 +63,7 @@ class ShopOrderDetailSerializer(serializers.ModelSerializer):
             'total', 'status', 'tracking_number', 'notes', 'items', 'timeline',
             'created_at', 'updated_at', 'confirmed_at', 'shipped_at', 'delivered_at'
         ]
-        read_only_fields = ['id', 'subtotal', 'tax', 'shipping_fee', 'discount', 'total']
+        read_only_fields = ['id', 'subtotal', 'tax', 'shipping_fee', 'discount', 'total',"comission_given", 'created_at', 'updated_at', 'confirmed_at', 'shipped_at', 'delivered_at']
     
     def get_order_number(self, obj):
         return obj.get_order_number()
@@ -78,7 +78,7 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ShopOrder
         fields = [
-            'id', 'order_number', 'shop_name', 'total', 'status',
+            'id', 'order_number', 'shop_name', 'total', 'status',"commission_given",
             'item_count', 'created_at'
         ]
         read_only_fields = fields
@@ -181,6 +181,13 @@ class VendorOrderStatsSerializer(serializers.Serializer):
     shipped_orders = serializers.IntegerField()
     total_sales = serializers.DecimalField(max_digits=12, decimal_places=2)
     average_order_value = serializers.DecimalField(max_digits=12, decimal_places=2)
+    delivered_orders= serializers.IntegerField()
+    cancelled_orders= serializers.IntegerField()
+    returned_orders= serializers.IntegerField()
+    delivered_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    delivered_but_not_given_commission_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    need_to_pay_commission_to_the_platform = serializers.DecimalField(max_digits=12, decimal_places=2)
+    
 
 
 class BadRequest(APIException):

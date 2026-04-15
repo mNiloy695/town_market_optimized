@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name='shoporder',
-            name='comission_given',
+            name='commission_given',
             field=models.BooleanField(default=False),
         ),
     ]

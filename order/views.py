@@ -420,6 +420,8 @@ class VendorDashboardStatsView(APIView):
             )
         
         shop_orders = ShopOrder.objects.filter(shop=shop)
+        need_to_pay_commission_to_the_platform = shop_orders.filter(status='delivered',commission_given=False).aggregate(Sum('total'))['total__sum'] or 0
+        print(need_to_pay_commission_to_the_platform)
         
         # Calculate statistics
         stats = {
@@ -429,6 +431,13 @@ class VendorDashboardStatsView(APIView):
             'shipped_orders': shop_orders.filter(status='shipped').count(),
             'total_sales': shop_orders.aggregate(Sum('total'))['total__sum'] or 0,
             'average_order_value': shop_orders.aggregate(Avg('total'))['total__avg'] or 0,
+            'delivered_orders': shop_orders.filter(status='delivered').count(),
+            'delivered_amount': shop_orders.filter(status='delivered').aggregate(Sum('total'))['total__sum'] or 0,
+            'delivered_but_not_given_commission_amount': shop_orders.filter(status='delivered',commission_given=False).aggregate(Sum('total'))['total__sum'] or 0,
+            'cancelled_orders': shop_orders.filter(status='cancelled').count(),
+            'returned_orders': shop_orders.filter(status='returned').count(),
+            
+            'need_to_pay_commission_to_the_platform': need_to_pay_commission_to_the_platform or 0
         }
         
         serializer = VendorOrderStatsSerializer(stats)
@@ -686,10 +695,7 @@ class VendorReturnApprovalView(APIView):
 
 
 class PayNowView(APIView):
-    """
-    Endpoint to re-initiate payment for an existing pending order.
-    Useful if initial payment failed or user closed the payment page.
-    """
+ 
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, order_id):
