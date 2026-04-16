@@ -4,17 +4,11 @@
 
 A **production-ready multi-vendor e-commerce order management system** for Django Rest Framework with the following features:
 
-### Core Features
-✅ **Multi-vendor support** - Multiple shops in one order  
-✅ **Automatic order splitting** - Orders split by vendor at checkout  
-✅ **Stock management** - Automatic inventory tracking and reduction  
-✅ **Order lifecycle** - Complete status tracking from creation to delivery  
-✅ **Vendor dashboard** - Shop owners see only their orders  
-✅ **Customer tracking** - Users see all their orders across all shops  
-✅ **Audit trail** - Complete timeline of all order events  
-✅ **Flexible pricing** - Tax, shipping, discounts per shop order  
-✅ **Payment flexibility** - Multiple payment methods support  
-✅ **Return management** - Full return workflow support  
+✅ **Partial Payment System** - Upfront booking fee (Shipping) + COD for balance
+✅ **Thread-Safe Stock Management** - Optimized with `F()` expressions and `select_for_update`
+✅ **Payment Integration** - SSLCommerz with automatic IPN/Webhook handling
+✅ **Validation** - Strict Bangladeshi mobile number and field validation
+✅ **Auto-Cancellation** - Celery tasks to release stock from expired orders
 
 ## 📁 Files Created/Modified
 

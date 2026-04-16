@@ -11,7 +11,8 @@ urlpatterns = [
     path('v1/product/',include('product.urls')),
     path('v1/order/',include('order.urls')),
     path('v1/cart/',include('cart.urls')),
-    path("v1/invoice/",include("invoice.urls"))
+    path("v1/invoice/",include("invoice.urls")),
+    path("v1/review/",include("review.urls"))
     
 ]
 if settings.DEBUG or True:

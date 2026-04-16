@@ -4,6 +4,8 @@ from .models import (
     ProductCategoryOption, ProductCategoryOptionValue, ProductVariant, 
     ProductVariantOptionValue
 )
+from order.models import OrderItem
+from review.models import Review
 
 class ParentProductCategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -58,16 +60,21 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         fields=['id', 'product', 'price', 'description', 'stock', 'option_values']
         read_only_fields = ['product']
 
+
+
+from review.serializers import ReviewSerializer
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(many=True)
     images = ProductImageSerializer(many=True, required=False)
     shop_data=serializers.SerializerMethodField(read_only=True)
     sub_category_data=serializers.SerializerMethodField(read_only=True)
     available_options = serializers.SerializerMethodField(read_only=True)
+    eligibale_for_review=serializers.SerializerMethodField(read_only=True)
+    reviews=serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model=Product
-        fields=['id', 'name', 'slug', 'shop','shop_data','sub_category','sub_category_data', 'variants','images','available_options','created_at','updated_at']
+        fields=['id', 'name', 'slug', 'shop','shop_data','sub_category','sub_category_data', 'variants','images','available_options','created_at','updated_at','eligibale_for_review','reviews']
         read_only_fields = ['shop','created_at','updated_at']
     def get_shop_data(self,obj):
         return {
@@ -96,6 +103,26 @@ class ProductSerializer(serializers.ModelSerializer):
             result[opt_name] = [{"id": vid, "value": val} for val, vid in val_dict.items()]
         return result
 
+    def get_eligibale_for_review(self, obj):
+        user = self.context['request'].user
+        if not user.is_authenticated:
+            return False
+            
+        purchased = OrderItem.objects.filter(
+            shop_order__order__user=user,
+            shop_order__status="delivered",
+            product_variant__product=obj
+        ).exists()
+
+        if purchased and Review.objects.filter(product=obj, user=user).exists():
+            return False
+        return purchased
+
+    
+    def get_reviews(self,obj):
+        reviews=Review.objects.filter(product=obj).order_by('-created_at')[:10]
+        return ReviewSerializer(reviews, many=True).data
+        
     def validate(self, attrs):
         if self.instance:
             if self.instance.shop.owner != self.context['request'].user:

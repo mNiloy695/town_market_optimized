@@ -18,6 +18,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
 from django.shortcuts import get_object_or_404
 
+
 class ProductPagination(PageNumberPagination):
     page_size = 20
     max_page_size = 1000
@@ -51,7 +52,8 @@ class CustomProductManagePermission(permissions.BasePermission):
             return True
         # Check if the user is the owner of the shop that own this product
         return obj.shop.owner == request.user or request.user.is_staff
-
+from rest_framework.decorators import action
+from review.serializers import ReviewSerializer
 class ProductListView(ModelViewSet):
     queryset=Product.objects.select_related('shop','sub_category').prefetch_related('variants__option_values__option_value__product_category_option', 'images').all()
     serializer_class=ProductSerializer
@@ -75,6 +77,23 @@ class ProductListView(ModelViewSet):
             serializer.save(shop=shop)
         else:
             raise serializers.ValidationError({"detail": "Only users with the 'seller' role can create products."})
+    
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def product_review(self, request):
+        product_id = request.query_params.get('product_id')
+        if not product_id:
+            raise serializers.ValidationError({"detail": "Product ID is required."})
+        product = Product.objects.prefetch_related('reviews').filter(id=product_id).first()
+        if not product:
+            raise serializers.ValidationError({"detail": "Product not found."})
+        reviews = product.reviews.all()
+        page = self.paginate_queryset(reviews)
+        if page is not None:
+            serializer = ReviewSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = ReviewSerializer(reviews, many=True)
+        return Response(serializer.data)
+    
 
 class ProductCategoryOptionListView(generics.ListAPIView):
     queryset=ProductCategoryOption.objects.all()

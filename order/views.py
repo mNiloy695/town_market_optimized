@@ -106,6 +106,7 @@ class CheckoutView(APIView):
                     status='pending_payment',
                     shipping_address=serializer.validated_data['shipping_address'],
                     shipping_city=serializer.validated_data['shipping_city'],
+                    shipping_upazilla=serializer.validated_data['shipping_upazilla'],
                     shipping_postal_code=serializer.validated_data['shipping_postal_code'],
                     shipping_country=serializer.validated_data['shipping_country'],
                     phone_number=serializer.validated_data['phone_number'],

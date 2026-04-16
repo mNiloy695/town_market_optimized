@@ -129,9 +129,10 @@ class CheckoutSerializer(serializers.Serializer):
     """
     # Shipping information
     shipping_address = serializers.CharField(max_length=2500)
-    shipping_city = serializers.CharField(max_length=1000)
+    shipping_city = serializers.ChoiceField(choices=[('feni', 'Feni')])
+    shipping_upazilla = serializers.ChoiceField(choices=[('feni_sadar', 'Feni Sadar'), ('parshuram', 'Parshuram'), ('chagalaiya', 'Chagalaiya'), ('daganbhuiyan', 'Daganbhuiyan'), ('sonagazi', 'Sonagazi'), ('fulgazi', 'Fulgazi')])
     shipping_postal_code = serializers.CharField(max_length=200)
-    shipping_country = serializers.CharField(max_length=100)
+    shipping_country = serializers.ChoiceField(choices=[('bangladesh','Bangladesh')])
     phone_number = serializers.CharField(max_length=20)
     
     # Payment information
@@ -140,6 +141,15 @@ class CheckoutSerializer(serializers.Serializer):
         default='sslcommerz'
     )
     
+    def validate_phone_number(self, value):
+        import re
+        # Regex for Bangladeshi mobile numbers:
+        # Starts with optional +88 or 88, followed by 01 and then one of [3, 4, 5, 6, 7, 8, 9], then 8 more digits.
+        pattern = r"^(?:\+88|88)?(01[3-9]\d{8})$"
+        if not re.match(pattern, value):
+            raise serializers.ValidationError("Please provide a valid Bangladeshi mobile number (e.g., 01712345678).")
+        return value
+
     def validate(self, data):
         """Validate that cart has items"""
         request = self.context.get('request')
@@ -150,9 +160,10 @@ class CheckoutSerializer(serializers.Serializer):
         shipping_city = data.get('shipping_city',None)
         shipping_postal_code = data.get('shipping_postal_code',None)
         shipping_country = data.get('shipping_country',None)
+        shipping_upazilla=data.get('shipping_upazilla',None)
         phone_number = data.get('phone_number',None)
-        if not (shipping_address and shipping_city and shipping_country and shipping_postal_code and phone_number):
-            raise serializers.ValidationError({"error":"shipping address, city, postal code, country and phone number are required"})        
+        if not (shipping_address and shipping_city and shipping_country and shipping_postal_code and phone_number and shipping_upazilla):
+            raise serializers.ValidationError({"error":"shipping address, city, postal code,shipping_upazilla, country and phone number are required"})        
         
         try:
             cart = Cart.objects.get(user=request.user)

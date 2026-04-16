@@ -21,12 +21,12 @@ Represents a complete purchase by a customer.
 ```
 - user → CustomUser (FK)
 - order_number → str (unique, indexed)
-- total_amount → decimal
-- status → choice (confirmed, pending_payment, cancelled)
-- shipping_address, city, postal_code, country → str
-- phone_number → str
-- payment_method
-- is_paid → bool
+- total_amount → decimal (Items + Shipping)
+- status → choice (confirmed, pending_payment, cancelled, failed)
+- shipping_address, city, upazilla, postal_code, country → str
+- phone_number → str (Regex validated: BD numbers)
+- payment_method → choice (sslcommerz)
+- is_paid → bool (Covers upfront booking fee)
 - created_at, updated_at → datetime
 ```
 
@@ -311,17 +311,20 @@ Response: 200 OK
 }
 ```
 
-## Checkout Process (Step-by-Step)
+## Checkout & Payment Flow (Booking Fee + COD)
 
-1. **Customer adds items to cart** → ProductVariant stock checked
-2. **Customer initiates checkout** → POST /api/order/checkout/
-3. **System groups items by shop** → Creates separate orders for each vendor
-4. **Master Order created** → Links all ShopOrders
-5. **ShopOrders created** → One per vendor with their items
-6. **Stock reduced** → Inventory updated immediately
-7. **Cart cleared** → All items removed
-8. **Response sent** → Order with all details
-9. **Signals triggered** → Vendor notifications sent
+1. **Cart Preparation** - User adds items; shipping is calculated per shop.
+2. **Checkout Initiation** - User provides address/phone (BD mobile validation applies).
+3. **Old Order Cleanup** - System automatically cancels the user's previous pending orders and releases their stock.
+4. **Stock Locking** - System uses `select_for_update` to lock product rows and `F()` expressions to reserve stock atomically.
+5. **Partial Payment Request** - SSLCommerz is initiated for only the **Total Shipping Fee** (Booking Fee).
+6. **Payment Gateway** - User pays the Booking Fee.
+7. **Webhook/IPN Confirmation** - SSLCommerz notifies our server:
+    - Order is marked `confirmed` and `is_paid=True`.
+    - **Cart is cleared.**
+    - Reserved stock is converted to a permanent deduction.
+8. **Fulfillment** - Vendors process orders and collect the remaining item balance via **Cash on Delivery (COD)**.
+9. **Failure Handling** - If payment fails or session expires, stock is automatically released back to the inventory.
 
 ## Stock Management
 

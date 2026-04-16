@@ -1,5 +1,6 @@
+from django.template.defaultfilters import default
 from django.db import models
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.utils import timezone
 from accounts.models import CustomUser
 from shop.models import Shop
@@ -11,6 +12,12 @@ SHIPPING_CITY=(
 )
 
 SHIPPING_UPAZILLA=(
+    ('feni_sadar',"Feni Sadar"),
+    ('parshuram',"Parshuram"),
+    ('chagalaiya',"Chagalaiya"),
+    ('daganbhuiyan',"Daganbhuiyan"),
+    ('sonagazi',"Sonagazi"),
+    ('fulgazi',"Fulgazi"),
     
 )
 class Order(models.Model):
@@ -39,10 +46,20 @@ class Order(models.Model):
     
     # Delivery information
     shipping_address = models.TextField(blank=True)
-    shipping_city = models.CharField(max_length=100, blank=True)
-    shipping_postal_code = models.CharField(max_length=20, blank=True)
-    shipping_country = models.CharField(max_length=100, blank=True)
-    phone_number = models.CharField(max_length=20, blank=True)
+    shipping_city = models.CharField(choices=SHIPPING_CITY,max_length=100, blank=True)
+    shipping_upazilla = models.CharField(choices=SHIPPING_UPAZILLA,max_length=100, blank=True)
+    shipping_postal_code = models.CharField(max_length=20, blank=True,default="3900")
+    shipping_country = models.CharField(max_length=100, blank=True,default="Bangladesh")
+    phone_number = models.CharField(
+        max_length=20, 
+        blank=True,
+        validators=[
+            RegexValidator(
+                regex=r"^(?:\+88|88)?(01[3-9]\d{8})$",
+                message="Please provide a valid Bangladeshi mobile number."
+            )
+        ]
+    )
     
     # Payment tracking
     payment_method = models.CharField(
