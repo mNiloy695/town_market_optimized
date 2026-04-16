@@ -98,16 +98,17 @@ class Order(models.Model):
             
             # For each shop order, reduce actual stock
             for shop_order in self.shop_orders.filter(status='pending'):
-                for item in shop_order.items.all():
-                    # Reduce actual stock and reserved quantity
-                    item.product_variant.stock -= item.quantity
-                    item.product_variant.reserved_quantity -= item.quantity
-                    item.product_variant.save()
+                for item in shop_order.items.select_related('product_variant').all():
+                    # Reduce actual stock and reserved quantity atomically
+                    variant = item.product_variant
+                    variant.stock = models.F('stock') - item.quantity
+                    variant.reserved_quantity = models.F('reserved_quantity') - item.quantity
+                    variant.save(update_fields=['stock', 'reserved_quantity'])
                 
                 # Update shop order status to confirmed
                 shop_order.status = 'confirmed'
                 shop_order.confirmed_at = timezone.now()
-                shop_order.save()
+                shop_order.save(update_fields=['status', 'confirmed_at'])
                 
                 # Add timeline entry
                 from .models import OrderTimeline
@@ -132,12 +133,14 @@ class Order(models.Model):
                 
                 # Release reserved stock for all associated shop orders
                 for shop_order in self.shop_orders.filter(status='pending'):
-                    for item in shop_order.items.all():
-                        item.product_variant.reserved_quantity -= item.quantity
-                        item.product_variant.save()
+                    # Use select_related and bulk-like updates where possible
+                    for item in shop_order.items.select_related('product_variant').all():
+                        variant = item.product_variant
+                        variant.reserved_quantity = models.F('reserved_quantity') - item.quantity
+                        variant.save(update_fields=['reserved_quantity'])
                     
                     shop_order.status = 'cancelled'
-                    shop_order.save()
+                    shop_order.save(update_fields=['status'])
                     
                     # Log to timeline
                     from .models import OrderTimeline

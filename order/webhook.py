@@ -72,8 +72,9 @@ class IpnViewWebhookSSLCommerze(APIView):
 
             real_amount = float(validation.get('amount', 0))
             real_currency = validation.get('currency', '')
+            total_shipping_fee = sum(so.shipping_fee for so in order.shop_orders.all())
 
-            if real_amount != float(amount) or real_currency != currency:
+            if real_amount != float(total_shipping_fee) or real_currency != currency:
                 order.fail_order(reason='Payment amount/currency mismatch')
                 if invoice:
                     invoice.status = 'FAILED'

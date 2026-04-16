@@ -102,7 +102,7 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
-
+SHIPPING_FEE=config('SHIPPING_FEE', default=50, cast=int)
 #Marchent settings
 STORE_ID = config('STORE_ID')
 STORE_PASSWORD = config('STORE_PASSWORD')

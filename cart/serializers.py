@@ -28,15 +28,33 @@ class CartItemSerializer(serializers.ModelSerializer):
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
-    total = serializers.SerializerMethodField()
+    subtotal = serializers.SerializerMethodField()
+    shipping_total = serializers.SerializerMethodField()
+    grand_total = serializers.SerializerMethodField()
+    booking_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Cart
-        fields = ['id', 'user', 'created_at', 'updated_at', 'items', 'total']
-        read_only_fields = ['user', 'created_at', 'updated_at', 'items', 'total']
+        fields = ['id', 'user', 'created_at', 'updated_at', 'items', 'subtotal', 'shipping_total', 'grand_total', 'booking_amount']
+        read_only_fields = ['user', 'created_at', 'updated_at', 'items']
 
-    def get_total(self, obj):
+    def get_subtotal(self, obj):
         return sum(item.product_variant.price * item.quantity for item in obj.items.all())
+
+    def get_shipping_total(self, obj):
+        from django.conf import settings
+        shipping_fee_per_shop = getattr(settings, 'SHIPPING_FEE', 50)
+        
+        # Get unique shops in the cart
+        shops = set(item.product_variant.product.shop_id for item in obj.items.all())
+        return len(shops) * shipping_fee_per_shop
+
+    def get_grand_total(self, obj):
+        return self.get_subtotal(obj) + self.get_shipping_total(obj)
+
+    def get_booking_amount(self, obj):
+        # Booking amount is the shipping total as per the new business logic
+        return self.get_shipping_total(obj)
 
 
 class AddToCartSerializer(serializers.Serializer):

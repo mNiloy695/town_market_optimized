@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
-from django.db import transaction
+from django.db import transaction, models
 from django.shortcuts import get_object_or_404
 from django.db.models import Q, Sum, Count, Avg
 from django.utils import timezone
@@ -19,6 +19,7 @@ from .serializers import (
 )
 from cart.models import Cart, CartItem
 from shop.models import Shop
+from core.settings import SHIPPING_FEE
 from product.models import ProductVariant
 
 
@@ -70,15 +71,19 @@ class CheckoutView(APIView):
                     )
                 
                 # 3. Validate available stock for all items (after old stock has been released)
-                # We use select_related to minimize queries, and since we fetched cart AFTER fail_order, 
-                # these variants will have the most recent database values.
-                
+                # Use select_for_update() on variants to prevent concurrent checkouts from causing race conditions
                 for cart_item in cart.items.select_related('product_variant__product').all():
-                    if cart_item.product_variant.available_stock < cart_item.quantity:
+                    # Locking the variant row during the entire transaction for absolute safety
+                    variant = cart_item.product_variant
+                    # We re-fetch with select_for_update to lock
+                    from product.models import ProductVariant
+                    locked_variant = ProductVariant.objects.select_for_update().get(id=variant.id)
+                    
+                    if locked_variant.available_stock < cart_item.quantity:
                         return Response(
                             {
-                                'error': f"Not enough stock for {cart_item.product_variant.product.name}. Only {cart_item.product_variant.available_stock} is available",
-                                'available': cart_item.product_variant.available_stock,
+                                'error': f"Not enough stock for {locked_variant.product.name}. Only {locked_variant.available_stock} is available",
+                                'available': locked_variant.available_stock,
                                 'requested': cart_item.quantity
                             },
                             status=status.HTTP_400_BAD_REQUEST
@@ -113,15 +118,15 @@ class CheckoutView(APIView):
                     shop_order = self._create_shop_order(order, shop, cart_items)
                     shop_orders.append(shop_order)
                     
-                    # Add timeline entry
-                    OrderTimeline.objects.create(
-                        shop_order=shop_order,
-                        action='created',
-                        description='Order created from cart',
-                        created_by=request.user
-                    )
+                # Calculate totals after creating shop orders
+                total_shipping_fee = sum(so.shipping_fee for so in shop_orders)
+                total_order_amount = sum(so.total for so in shop_orders)
                 
-                # Cart items are NOT cleared here anymore. 
+                # Update master order with the correct totals
+                order.total_amount = total_order_amount
+                order.save(update_fields=['total_amount'])
+
+                # Cart items are NOT cleared here anymore...
                 # They will be cleared in Order.confirm_payment() once the payment is successful.
                 # cart.items.all().delete()
                 
@@ -171,10 +176,13 @@ class CheckoutView(APIView):
         # Simple sanitization
         cus_name = ''.join(e for e in cus_name if e.isalnum() or e.isspace())[:30]
 
+        # Calculate the amount to be paid (total shipping fee of all shop orders)
+        amount_to_pay = sum(so.shipping_fee for so in order.shop_orders.all())
+
         post_data = {
             'store_id': settings.STORE_ID,
             'store_passwd': settings.STORE_PASSWORD,
-            'total_amount': float(order.total_amount),
+            'total_amount': float(amount_to_pay),
             'currency': 'BDT',
             'tran_id': order.order_number,
             'success_url': webhook_url,
@@ -220,10 +228,8 @@ class CheckoutView(APIView):
             item.product_variant.price * item.quantity 
             for item in cart_items
         )
-        
-        # You can add tax and shipping calculations here based on business logic
+        shipping_fee = SHIPPING_FEE
         tax = 0  # Calculate tax if applicable
-        shipping_fee = 0  # Calculate shipping if applicable
         discount = 0  # Apply discount codes if applicable
         
         total = subtotal + tax + shipping_fee - discount
@@ -247,9 +253,10 @@ class CheckoutView(APIView):
                 quantity=cart_item.quantity
             )
             
-            # Reserve stock (pending payment confirmation)
-            cart_item.product_variant.reserved_quantity += cart_item.quantity
-            cart_item.product_variant.save()
+            # Reserve stock (pending payment confirmation) atomically
+            variant = cart_item.product_variant
+            variant.reserved_quantity = models.F('reserved_quantity') + cart_item.quantity
+            variant.save(update_fields=['reserved_quantity'])
         
         return shop_order
 
@@ -672,7 +679,7 @@ class VendorReturnApprovalView(APIView):
                 if action == 'approve':
                     # Restore stock
                     for item in shop_order.items.all():
-                        item.product_variant.stock += item.quantity
+                        item.product_variant.stock = models.F('stock') + item.quantity
                         item.product_variant.save()
                     
                     shop_order.status = 'returned'

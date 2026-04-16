@@ -80,7 +80,10 @@ class CartDetailView(APIView):
 
 	def get(self, request):
 		cart, _ = Cart.objects.get_or_create(user=request.user)
+		# Prefetch related items, variants, and product info to avoid N+1 queries in serializer
+		cart_qs = Cart.objects.filter(id=cart.id).prefetch_related(
+			'items__product_variant__product__shop'
+		)
+		cart = cart_qs.first()
 		serializer = CartSerializer(cart)
 		return Response(serializer.data)
-
-
