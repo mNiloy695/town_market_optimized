@@ -74,6 +74,9 @@ class Order(models.Model):
             import uuid
             self.order_number = f"ORD-{timezone.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
         super().save(*args, **kwargs)
+
+    def get_order_number(self):
+        return self.order_number
     
     def confirm_payment(self):
         """
@@ -86,6 +89,12 @@ class Order(models.Model):
             self.is_paid = True
             self.status = 'confirmed'
             self.save()
+
+            # Clear user's cart upon successful payment
+            from cart.models import Cart
+            cart = Cart.objects.filter(user=self.user).first()
+            if cart:
+                cart.items.all().delete()
             
             # For each shop order, reduce actual stock
             for shop_order in self.shop_orders.filter(status='pending'):

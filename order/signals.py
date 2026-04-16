@@ -13,9 +13,25 @@ from django.dispatch import receiver
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
-from .models import ShopOrder, OrderItem, OrderTimeline
+from .models import ShopOrder, OrderItem, OrderTimeline,Order
 from accounts.models import CustomUser
+from invoice.models import Invoice
 
+
+@receiver(post_save,sender=Order)
+def handle_invoice_creation_based_on_order(sender,instance,created,**kwargs):
+    if created:
+        Invoice.objects.create(
+            order=instance,
+            invoice_number=instance.get_order_number(),
+            transaction_id=instance.order_number,
+            amount=instance.total_amount,
+            invoice_date=instance.created_at,
+            payment_method=instance.payment_method or "sslcommerz",
+            customer_name=instance.user.name or instance.phone_number,
+            customer_email=instance.user.email or instance.user.phone or instance.phone_number,
+            customer_phone=instance.user.phone or instance.phone_number,
+        )
 
 @receiver(post_save, sender=ShopOrder)
 def handle_shop_order_creation(sender, instance, created, **kwargs):
@@ -160,3 +176,6 @@ def send_vendor_status_notification(shop_order):
 #             action='confirmed',
 #             description='Auto-confirmed after 30 minutes'
 #         )
+
+
+

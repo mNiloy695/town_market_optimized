@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q, Sum, Count, Avg
 from django.utils import timezone
 
+
 from core.settings import COMMISSION_PERCENTAGE
 
 from .models import Order, ShopOrder, OrderItem, OrderTimeline
@@ -86,6 +87,10 @@ class CheckoutView(APIView):
                     for items in shop_items.values()
                 )
                 
+                # Cancel any existing pending_payment orders for this user to release reserved stock
+                for old_order in Order.objects.filter(user=request.user, status='pending_payment'):
+                    old_order.fail_order(reason='New checkout initiated, previous pending order cancelled.')
+
                 # Create master order
                 order = Order.objects.create(
                     user=request.user,
@@ -113,8 +118,9 @@ class CheckoutView(APIView):
                         created_by=request.user
                     )
                 
-                # Clear cart
-                cart.items.all().delete()
+                # Cart items are NOT cleared here anymore. 
+                # They will be cleared in Order.confirm_payment() once the payment is successful.
+                # cart.items.all().delete()
                 
                 # Initiate SSLCommerz Payment
                 payment_response = self._initiate_sslcommerz_payment(request, order)
