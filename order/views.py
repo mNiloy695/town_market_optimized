@@ -414,7 +414,7 @@ class VendorDashboardStatsView(APIView):
     def get(self, request):
         """Get dashboard statistics"""
         year=request.query_params.get('year', timezone.now().year)
-        month=request.query_params.get('month',timezone.now().month)
+        month=request.query_params.get('month',None)
         day=request.query_params.get('day',None)
         try:
             shop = request.user.shop
@@ -424,8 +424,17 @@ class VendorDashboardStatsView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        shop_orders = ShopOrder.objects.filter(shop=shop, order__created_at__year=year, order__created_at__month=month,order__created_at__day=day) if day else ShopOrder.objects.filter(shop=shop, order__created_at__year=year, order__created_at__month=month)
-        need_to_pay_commission_to_the_platform = shop_orders.filter(status='delivered',commission_given=False).aggregate(Sum('total'))['total__sum'] or 0
+        all_time_orders = ShopOrder.objects.filter(shop=shop)
+        if not month and not day:
+            shop_orders = all_time_orders.filter(order__created_at__year=year)
+        elif month and not day:
+            shop_orders = all_time_orders.filter(order__created_at__year=year,order__created_at__month=month)
+        elif month and day:
+            shop_orders = all_time_orders.filter(order__created_at__year=year,order__created_at__month=month,order__created_at__day=day)
+        else:
+            shop_orders = all_time_orders.filter(order__created_at__year=year)
+            
+        need_to_pay_commission_to_the_platform = all_time_orders.filter(status='delivered',commission_given=False).aggregate(Sum('total'))['total__sum'] or 0
         need_to_pay_commission_to_the_platform=need_to_pay_commission_to_the_platform*COMMISSION_PERCENTAGE 
         print(need_to_pay_commission_to_the_platform)
         
