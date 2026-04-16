@@ -56,42 +56,45 @@ class CheckoutView(APIView):
         
         try:
             with transaction.atomic():
+                # 1. Cancel any existing pending_payment orders for this user to release reserved stock
+                # We do this FIRST so that the stock check below sees the released stock.
+                for old_order in Order.objects.filter(user=request.user, status='pending_payment'):
+                    old_order.fail_order(reason='New checkout initiated, previous pending order cancelled.')
+
+                # 2. Fetch cart and check if it's not empty
                 cart = get_object_or_404(Cart, user=request.user)
-                
-                # Check cart is not empty
                 if not cart.items.exists():
                     return Response(
                         {'error': 'Cart is empty'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Validate available stock for all items (considering reservations)
-                for cart_item in cart.items.all():
+                # 3. Validate available stock for all items (after old stock has been released)
+                # We use select_related to minimize queries, and since we fetched cart AFTER fail_order, 
+                # these variants will have the most recent database values.
+                
+                for cart_item in cart.items.select_related('product_variant__product').all():
                     if cart_item.product_variant.available_stock < cart_item.quantity:
                         return Response(
                             {
-                                'error': f"Not enough stock for {cart_item.product_variant.product.name}",
+                                'error': f"Not enough stock for {cart_item.product_variant.product.name}. Only {cart_item.product_variant.available_stock} is available",
                                 'available': cart_item.product_variant.available_stock,
                                 'requested': cart_item.quantity
                             },
                             status=status.HTTP_400_BAD_REQUEST
                         )
                 
-                # Group cart items by shop
+                # 4. Group cart items by shop
                 shop_items = self._group_items_by_shop(cart)
                 
-                # Calculate total
+                # 5. Calculate total
                 grand_total = sum(
                     sum(item.product_variant.price * item.quantity 
                         for item in items)
                     for items in shop_items.values()
                 )
                 
-                # Cancel any existing pending_payment orders for this user to release reserved stock
-                for old_order in Order.objects.filter(user=request.user, status='pending_payment'):
-                    old_order.fail_order(reason='New checkout initiated, previous pending order cancelled.')
-
-                # Create master order
+                # 6. Create master order
                 order = Order.objects.create(
                     user=request.user,
                     total_amount=grand_total,
@@ -531,7 +534,7 @@ class PaymentConfirmationView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Only allow confirmation for pending payment orders
+    
         if order.status != 'pending_payment':
             return Response(
                 {'error': f'Order is already {order.status}'},
