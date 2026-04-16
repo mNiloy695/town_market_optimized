@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import models
 from .models import (
     Product, ProductCategory, ProductImage, ParentProductCategory, 
     ProductCategoryOption, ProductCategoryOptionValue, ProductVariant, 
@@ -70,11 +71,12 @@ class ProductSerializer(serializers.ModelSerializer):
     sub_category_data=serializers.SerializerMethodField(read_only=True)
     available_options = serializers.SerializerMethodField(read_only=True)
     eligibale_for_review=serializers.SerializerMethodField(read_only=True)
+    average_rating=serializers.SerializerMethodField(read_only=True)
     reviews=serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model=Product
-        fields=['id', 'name', 'slug', 'shop','shop_data','sub_category','sub_category_data', 'variants','images','available_options','created_at','updated_at','eligibale_for_review','reviews']
+        fields=['id', 'name', 'slug', 'shop','shop_data','average_rating','sub_category','sub_category_data', 'variants','images','available_options','created_at','updated_at','eligibale_for_review','reviews']
         read_only_fields = ['shop','created_at','updated_at']
     def get_shop_data(self,obj):
         return {
@@ -119,9 +121,20 @@ class ProductSerializer(serializers.ModelSerializer):
         return purchased
 
     
-    def get_reviews(self,obj):
-        reviews=Review.objects.filter(product=obj).order_by('-created_at')[:10]
+    def get_reviews(self, obj):
+        reviews = Review.objects.filter(product=obj).order_by('-created_at')[:10]
         return ReviewSerializer(reviews, many=True).data
+
+    def get_average_rating(self, obj):
+        from django.db.models import Avg, IntegerField
+        from django.db.models.functions import Cast
+        reviews = Review.objects.filter(product=obj)
+        if reviews.exists():
+            avg = reviews.annotate(
+                rating_int=Cast('rating', output_field=IntegerField())
+            ).aggregate(Avg('rating_int'))['rating_int__avg']
+            return round(avg, 1) if avg else 0
+        return 0
         
     def validate(self, attrs):
         if self.instance:

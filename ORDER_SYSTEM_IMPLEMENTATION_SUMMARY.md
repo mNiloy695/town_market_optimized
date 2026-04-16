@@ -9,6 +9,7 @@ A **production-ready multi-vendor e-commerce order management system** for Djang
 ✅ **Payment Integration** - SSLCommerz with automatic IPN/Webhook handling
 ✅ **Validation** - Strict Bangladeshi mobile number and field validation
 ✅ **Auto-Cancellation** - Celery tasks to release stock from expired orders
+✅ **Review & Rating System** - Purchase-verified reviews with automated comment generation
 
 ## 📁 Files Created/Modified
 

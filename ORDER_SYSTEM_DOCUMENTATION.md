@@ -311,6 +311,37 @@ Response: 200 OK
 }
 ```
 
+### Review & Rating System
+
+#### 1. **List/Create Reviews**
+```
+GET /v1/review/?product_id={id}
+POST /v1/review/
+
+Request:
+{
+    "product": 1,
+    "rating": "5",
+    "review_text": "Excellent product!" // Optional
+}
+```
+**Features:**
+- **Purchase Verification**: Users can only review products that have been **delivered** to them.
+- **Single Review**: One review per user per product.
+- **Automated Comments**: If `review_text` is empty, a default message is generated based on the star rating (e.g., 5-stars → "I am extremely satisfied...").
+- **Visual Display**: Returns `rating` (numeric) and `rating_display` (emoji stars: ⭐⭐⭐⭐⭐).
+
+#### 2. **Product Detail Integration**
+In `GET /v1/product/{id}/`, the following fields are available:
+- `eligibale_for_review`: Boolean indicating if the current logged-in user can leave a review.
+- `reviews`: A list of the latest 10 reviews for the product.
+
+#### 3. **Optimized Product Reviews**
+```
+GET /v1/product/list/{product_id}/product_review/
+```
+Provides a dedicated, paginated list of all reviews for a specific product.
+
 ## Checkout & Payment Flow (Booking Fee + COD)
 
 1. **Cart Preparation** - User adds items; shipping is calculated per shop.
