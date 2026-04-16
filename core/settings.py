@@ -12,11 +12,12 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
+from unicodedata import decimal
 from decouple import config
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 from datetime import timedelta
-
+from decimal import Decimal
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -116,6 +117,9 @@ CELERY_BEAT_SCHEDULE = {
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Dhaka'
 
+
+#commission percentage
+COMMISSION_PERCENTAGE = config('commission_percentage', default=0.10, cast=Decimal)
 #JWT setting
 
 SIMPLE_JWT = {

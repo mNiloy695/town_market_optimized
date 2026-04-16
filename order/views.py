@@ -8,6 +8,8 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q, Sum, Count, Avg
 from django.utils import timezone
 
+from core.settings import COMMISSION_PERCENTAGE
+
 from .models import Order, ShopOrder, OrderItem, OrderTimeline
 from .serializers import (
     CheckoutSerializer, OrderDetailSerializer, OrderListSerializer,
@@ -411,6 +413,9 @@ class VendorDashboardStatsView(APIView):
     
     def get(self, request):
         """Get dashboard statistics"""
+        year=request.query_params.get('year', timezone.now().year)
+        month=request.query_params.get('month',timezone.now().month)
+        day=request.query_params.get('day',None)
         try:
             shop = request.user.shop
         except:
@@ -419,8 +424,9 @@ class VendorDashboardStatsView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        shop_orders = ShopOrder.objects.filter(shop=shop)
-        need_to_pay_commission_to_the_platform = shop_orders.filter(status='delivered',commission_given=False).aggregate(Sum('total'))['total__sum']*10/100 or 0
+        shop_orders = ShopOrder.objects.filter(shop=shop, order__created_at__year=year, order__created_at__month=month,order__created_at__day=day) if day else ShopOrder.objects.filter(shop=shop, order__created_at__year=year, order__created_at__month=month)
+        need_to_pay_commission_to_the_platform = shop_orders.filter(status='delivered',commission_given=False).aggregate(Sum('total'))['total__sum'] or 0
+        need_to_pay_commission_to_the_platform=need_to_pay_commission_to_the_platform*COMMISSION_PERCENTAGE 
         print(need_to_pay_commission_to_the_platform)
         
         # Calculate statistics
@@ -436,7 +442,6 @@ class VendorDashboardStatsView(APIView):
             'delivered_but_not_given_commission_amount': shop_orders.filter(status='delivered',commission_given=False).aggregate(Sum('total'))['total__sum'] or 0,
             'cancelled_orders': shop_orders.filter(status='cancelled').count(),
             'returned_orders': shop_orders.filter(status='returned').count(),
-            
             'need_to_pay_commission_to_the_platform': need_to_pay_commission_to_the_platform or 0
         }
         
