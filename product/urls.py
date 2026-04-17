@@ -2,11 +2,13 @@ from django.urls import path,include
 from .views import (
     ProductCategoryListView, ParentProductCategoryListView, ProductImageView,
     ProductListView, ProductCategoryOptionListView, ProductCategoryOptionValueListView,
-    ProductAvailableOptionsView, FindVariantView,MyShopProductView
+    ProductAvailableOptionsView, FindVariantView,MyShopProductView,ProductImageDeleteView
 )
+
 from rest_framework.routers import DefaultRouter
 router=DefaultRouter()
 router.register('list',ProductListView)
+router.register('product-image-delete',ProductImageDeleteView,basename='product-image-delete')
 urlpatterns=[
     path('parent-product-category/',ParentProductCategoryListView.as_view()),
     path('product-category/',ProductCategoryListView.as_view()),

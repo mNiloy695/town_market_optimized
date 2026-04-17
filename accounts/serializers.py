@@ -103,16 +103,22 @@ class LoginSerializer(serializers.Serializer):
 from .models import UserProfile
 class UserProfileSerializer(serializers.ModelSerializer):
     phone=serializers.SerializerMethodField(read_only=True)
+    is_request_for_shop=serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model=UserProfile
-        fields=["id","user","avatar","name","email","gender","birth_date","phone"]
+        fields=["id","user","avatar","name","email","gender","birth_date","phone","is_request_for_shop"]
         read_only_fields=['user','id']
         
     
     def get_phone(self, instance):
         if hasattr(instance.user,"phone"):
             return str(instance.user.phone)
+        return None
+    
+    def get_is_request_for_shop(self,instance):
+        if getattr(instance.user,'is_request_for_shop'):
+            return str(instance.user.is_request_for_shop)
         return None
     
 

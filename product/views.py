@@ -1,8 +1,12 @@
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, status, viewsets
+from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.permissions import BasePermission
 from .models import (
     Product, ProductCategory, ProductImage, ParentProductCategory, 
     ProductCategoryOption, ProductCategoryOptionValue
 )
+
 from .serializers import (
     ProductSerializer, ProductCategorySerializer, ProductImageSerializer,
     ParentProductCategorySerializer, ProductCategoryOptionSerializer,
@@ -127,16 +131,31 @@ class ProductCategoryOptionValueListView(generics.ListAPIView):
 
 #option value varianet with product
 
-class ProductAvailableOptionsView(generics.GenericAPIView):
+class ProductAvailableOptionsView(APIView):
     def post(self, request, pk):
         product = get_object_or_404(Product, pk=pk)
-        selected_option_value_ids = request.data.get('selected_option_value_ids', [])
-        selected_ids_set = set(selected_option_value_ids)
+        
+        # Support both POST body and GET query params
+        if request.method == 'POST':
+            selected_option_value_ids = request.data.get('selected_option_value_ids', [])
+        else:
+            selected_option_value_ids = request.query_params.get('selected_option_value_ids', '')
+
+        # Robust parsing
+        if isinstance(selected_option_value_ids, str):
+            selected_option_value_ids = [x.strip() for x in selected_option_value_ids.split(',') if x.strip()]
+        
+        try:
+            selected_ids_set = {int(x) for x in selected_option_value_ids}
+        except (ValueError, TypeError):
+            selected_ids_set = set()
         
         variants = product.variants.filter(stock__gt=0).prefetch_related('option_values__option_value__product_category_option')
-        # Filter variants that have the selected option values
-        if selected_option_value_ids:
-            variants = variants.filter(option_values__option_value_id__in=selected_option_value_ids)
+        
+        # Filter variants that have ALL selected option values
+        if selected_ids_set:
+            for val_id in selected_ids_set:
+                variants = variants.filter(option_values__option_value_id=val_id)
         
         options = {}
         for variant in variants:
@@ -144,32 +163,57 @@ class ProductAvailableOptionsView(generics.GenericAPIView):
                 option_name = ov.option_value.product_category_option.name
                 value = ov.option_value.value
                 value_id = ov.option_value.id
+                # Only include options not already selected
                 if value_id not in selected_ids_set:
                     if option_name not in options:
                         options[option_name] = {}
                     options[option_name][value] = value_id
-        # Convert to list of dicts
+        
         result = {}
         for opt_name, val_dict in options.items():
             result[opt_name] = [{"id": vid, "value": val} for val, vid in val_dict.items()]
         return Response(result)
 
+    def get(self, request, pk):
+        return self.post(request, pk)
 
-class FindVariantView(generics.GenericAPIView):
+
+class FindVariantView(APIView):
     def post(self, request, pk):
         product = get_object_or_404(Product, pk=pk)
-        option_value_ids = request.data.get('option_value_ids', [])
-        if not option_value_ids:
+        
+        # Support both POST body and GET query params
+        if request.method == 'POST':
+            option_value_ids = request.data.get('option_value_ids', [])
+        else:
+            option_value_ids = request.query_params.get('option_value_ids', '')
+
+        # Robust parsing
+        if isinstance(option_value_ids, str):
+            option_value_ids = [x.strip() for x in option_value_ids.split(',') if x.strip()]
+        
+        try:
+            target_set = {int(x) for x in option_value_ids}
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid option_value_ids format'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not target_set:
             return Response({'error': 'option_value_ids is required'}, status=status.HTTP_400_BAD_REQUEST)
         
         variants = product.variants.filter(stock__gt=0).prefetch_related('option_values')
-        # Filter variants that have exactly these option_value_ids
+        
         for variant in variants:
             variant_option_ids = set(variant.option_values.values_list('option_value_id', flat=True))
-            if set(option_value_ids) == variant_option_ids:
+            if target_set == variant_option_ids:
                 return Response({'variant_id': variant.id})
         
-        return Response({'error': 'No variant found with the given option values'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'error': 'No variant found with the given option values',
+            'searched_ids': list(target_set)
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def get(self, request, pk):
+        return self.post(request, pk)
 
 
 
@@ -195,3 +239,29 @@ class MyShopProductView(generics.ListAPIView):
         if not shop:
             return Product.objects.none()
         return Product.objects.filter(shop=shop)
+
+from .serializers import ProductImageDeleteSerializer
+
+
+#make it only for delete 
+class CustomPermissionForProductImage(BasePermission):
+    def has_permission(self, request, view):
+        if view.action == 'destroy':
+            return True
+        return False
+    
+    def has_object_permission(self, request, view, obj):
+        if view.action == 'destroy':
+            return obj.product.shop.owner == request.user
+        return False
+    
+
+class ProductImageDeleteView(ModelViewSet):
+    queryset=ProductImage.objects.all()
+    serializer_class=ProductImageDeleteSerializer
+    permission_classes=[CustomPermissionForProductImage]
+    http_method_names = ['delete']
+        
+
+
+    

@@ -1,421 +1,122 @@
-# Town Market - eCommerce API Documentation
+# 🚀 Town Market - Complete eCommerce API Documentation
 
-A comprehensive Django REST Framework API for managing products with variants, dynamic options, and a shopping cart system.
-
----
-
-## Table of Contents
-1. [Product APIs](#product-apis)
-2. [Cart APIs](#cart-apis)
-3. [Request/Response Examples](#requestresponse-examples)
-4. [Error Handling](#error-handling)
-5. [Frontend Integration](#frontend-integration)
+A professional, production-ready multi-vendor e-commerce backend built with Django REST Framework. This system supports independent shop management, product variants with dynamic options, thread-safe stock reservation, and a split-payment (Booking Fee + COD) checkout flow.
 
 ---
 
-## Product APIs
+## 🛠️ Global Configuration
 
-### 1. Get Product Details
-**Endpoint:** `GET /v1/product/list/{product_id}/`
-
-**Description:** Fetch product details including all variants, images, and available options with their IDs.
-
-**Response:**
-```json
-{
-  "id": 10,
-  "name": "Nike Air Max Professional",
-  "slug": "nike-air-max-professional",
-  "shop": 13,
-  "shop_data": {
-    "shop_name": "SALAH TOWER 1",
-    "shop_id": 13
-  },
-  "sub_category": 5,
-  "sub_category_data": {
-    "sub_category_name": "Suits",
-    "sub_category_id": 5
-  },
-  "variants": [
-    {
-      "id": 73,
-      "price": "150.00",
-      "stock": 100,
-      "description": "Red Edition / Size XL",
-      "option_values": [
-        {
-          "id": 143,
-          "option_value": 9,
-          "option_value_data": {
-            "option_name": "size",
-            "value_id": 9,
-            "value_name": "s"
-          }
-        },
-        {
-          "id": 144,
-          "option_value": 14,
-          "option_value_data": {
-            "option_name": "color",
-            "value_id": 14,
-            "value_name": "red"
-          }
-        }
-      ]
-    }
-  ],
-  "available_options": {
-    "size": [
-      {"id": 9, "value": "s"},
-      {"id": 10, "value": "m"},
-      {"id": 13, "value": "xxl"}
-    ],
-    "color": [
-      {"id": 14, "value": "red"},
-      {"id": 16, "value": "green"}
-    ]
-  },
-  "images": [],
-  "created_at": "2026-04-06T08:37:58Z",
-  "updated_at": "2026-04-06T08:37:58Z"
-}
-```
+- **Base URL**: `http://<domain>/v1/`
+- **Content-Type**: `application/json`
+- **Authentication**: JWT (JSON Web Token)
+- **Header**: `Authorization: Bearer <token>`
 
 ---
 
-### 2. Get Available Options (Filtered)
-**Endpoint:** `POST /v1/product/{product_id}/available-options/`
+## 🔑 1. Authentication & Accounts
 
-**Description:** Returns available options based on already selected option value IDs. Used for dynamic filtering as user selects options.
-
-**Request:**
-```json
-{
-  "selected_option_value_ids": [13]
-}
-```
-- `13` = ID of "xxl" size (value_id from available_options)
-
-**Response:**
-```json
-{
-  "color": [
-    {"id": 14, "value": "red"},
-    {"id": 16, "value": "green"}
-  ],
-  "material": [
-    {"id": 20, "value": "cotton"}
-  ]
-}
-```
-
-**Note:** Returns only unselected option groups with their IDs and values.
+### Registration & Login
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `accounts/auth/registration/` | `POST` | Register with `phone`, `password`, `name`. Sends OTP. |
+| `accounts/auth/active/` | `POST` | Activate account using `phone` and 4-digit `otp`. |
+| `accounts/auth/login/` | `POST` | Login to get `access` and `refresh` tokens. |
+| `accounts/auth/token/refresh/` | `POST` | Refresh expired access tokens. |
+| `accounts/auth/profile/` | `GET` | Get current user profile details. |
 
 ---
 
-### 3. Find Variant ID
-**Endpoint:** `POST /v1/product/{product_id}/find-variant/`
+## 🏬 2. Shop Management
 
-**Description:** Finds the exact variant ID matching the selected option value IDs.
+### Shop Discovery
+- **List Shops**: `GET /v1/shop/list/` (Paginated)
+- **Shop Detail**: `GET /v1/shop/list/{id}/`
 
-**Request:**
-```json
-{
-  "option_value_ids": [13, 16, 20]
-}
-```
-- `13` = xxl (size)
-- `16` = green (color)
-- `20` = cotton (material)
-
-**Response:**
-```json
-{
-  "variant_id": 77
-}
-```
-
-**Error Response:**
-```json
-{
-  "error": "No variant found with the given option values"
-}
-```
+### Vendor Onboarding
+- **Apply for Shop**: `POST /v1/shop/request/`
+- **Format**: `multipart/form-data`
+- **Fields**: `name`, `logo` (Image), `cover_image` (Image), `description`.
 
 ---
 
-### 4. Search Products
-**Endpoint:** `GET /v1/product/list/?search=nike&shop__id=13`
+## 📦 3. Product Catalog & Variants
 
-**Parameters:**
-- `search`: Search by product name, category slug, shop slug
-- `shop__id`: Filter by shop ID
+### Product List & Search
+- **Endpoint**: `GET /v1/product/list/`
+- **Filters**: `search`, `category` (ID), `shop` (ID).
+- **Includes**: `variants`, `images`, `average_rating`, `eligibale_for_review`.
 
-**Response:** List of matching products with pagination (20 per page).
+### Dynamic Option Filtering (Crucial for Frontend)
+As a user selects options (e.g., Color), the UI should update available sizes that actually exist in stock.
 
----
-
-## Cart APIs
-
-### 1. Add to Cart
-**Endpoint:** `POST /v1/cart/add/`
-
-**Authentication:** Required (Bearer token)
-
-**Request:**
-```json
-{
-  "variant_id": 77,
-  "quantity": 2
-}
-```
-
-**Response (201 Created):**
-```json
-{
-  "id": 5,
-  "cart": 3,
-  "product_variant": 77,
-  "product_variant_data": {
-    "id": 77,
-    "price": "145.00",
-    "stock": 45,
-    "description": "Blue Edition / Size XL",
-    "image": "http://example.com/media/product_images/image.jpg",
-    "is_available": true
-  },
-  "quantity": 2,
-  "added_at": "2026-04-06T12:34:56Z",
-  "updated_at": "2026-04-06T12:34:56Z"
-}
-```
-
-**Error Response (400):**
-```json
-{
-  "detail": "Not enough stock."
-}
-```
-
-**Note:** If variant already in cart, quantity is incremented.
+1. **Get Initial Available Options**: From the product detail response (`available_options` field).
+2. **Filter After Selection**: `POST /v1/product/{id}/available-options/`
+   - Request: `{ "selected_option_value_ids": [id1, id2] }`
+   - Response: Returns remaining valid combinations.
+3. **Find Exact Variant**: `POST /v1/product/{id}/find-variant/`
+   - Request: `{ "option_value_ids": [id1, id2] }`
+   - Response: `{ "variant_id": 77 }`
 
 ---
 
-### 2. Get Cart Details
-**Endpoint:** `GET /v1/cart/detail/`
+## 🛒 4. Cart & Stock Reservation
 
-**Authentication:** Required (Bearer token)
+### Real-Time Reservation
+When a user adds an item to the cart, the system **locks** the stock for a limited time to prevent overselling.
 
-**Response:**
-```json
-{
-  "id": 3,
-  "user": 1,
-  "created_at": "2026-04-06T12:00:00Z",
-  "updated_at": "2026-04-06T12:34:56Z",
-  "items": [
-    {
-      "id": 5,
-      "cart": 3,
-      "product_variant": 77,
-      "product_variant_data": {
-        "id": 77,
-        "price": "145.00",
-        "stock": 45,
-        "description": "Blue Edition",
-        "image": "http://example.com/media/product_images/image.jpg",
-        "is_available": true
-      },
-      "quantity": 2,
-      "added_at": "2026-04-06T12:34:56Z",
-      "updated_at": "2026-04-06T12:34:56Z"
-    }
-  ],
-  "total": "290.00"
-}
-```
-
-**Note:** 
-- `total` = sum of (variant price × item quantity)
-- `is_available` = true if stock >= quantity
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `cart/add/` | `POST` | Add `variant_id` and `quantity`. Reserves stock. |
+| `cart/detail/` | `GET` | View cart with `item_total`, `shipping_total`, and `booking_amount`. |
+| `cart/remove/item/{variant_id}/` | `DELETE`| Remove item and release stock. |
 
 ---
 
-## Request/Response Examples
+## 💳 5. Checkout & Partial Payments (SSLCommerz)
 
-### Complete User Flow
+### Split-Payment Workflow
+Town Market uses a **Booking Fee + Cash on Delivery** model.
+- **Booking Fee**: Total Shipping Fee (paid upfront via SSLCommerz).
+- **Remaining Balance**: Paid to the courier upon delivery (COD).
 
-#### 1. Load Product Page
-```bash
-curl -X GET "http://localhost:8000/v1/product/list/10/" \
-  -H "Content-Type: application/json"
-```
-
-#### 2. User Selects "Size = xxl" (id 13)
-```bash
-curl -X POST "http://localhost:8000/v1/product/10/available-options/" \
-  -H "Content-Type: application/json" \
-  -d '{"selected_option_value_ids": [13]}'
-```
-
-#### 3. User Selects "Color = green" (id 16)
-```bash
-curl -X POST "http://localhost:8000/v1/product/10/available-options/" \
-  -H "Content-Type: application/json" \
-  -d '{"selected_option_value_ids": [13, 16]}'
-```
-
-#### 4. Find Variant for "xxl" + "green"
-```bash
-curl -X POST "http://localhost:8000/v1/product/10/find-variant/" \
-  -H "Content-Type: application/json" \
-  -d '{"option_value_ids": [13, 16]}'
-```
-
-#### 5. Add to Cart
-```bash
-curl -X POST "http://localhost:8000/v1/cart/add/" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Token your_token" \
-  -d '{"variant_id": 77, "quantity": 2}'
-```
-
-#### 6. View Cart
-```bash
-curl -X GET "http://localhost:8000/v1/cart/detail/" \
-  -H "Authorization: Token your_token"
-```
+### The Checkout Process
+1. **Initiate Checkout**: `POST /v1/order/checkout/`
+   - Body: `shipping_address`, `shipping_city` (e.g., feni), `shipping_upazilla`, `phone_number`.
+   - Response: Returns a `payment_url`.
+2. **Payment Redirection**: Redirect user to the `payment_url`.
+3. **Webhook Confirmation**: Our backend receives an IPN from SSLCommerz.
+   - **Cart is auto-cleared** on success.
+   - Order status moves to `confirmed`.
+4. **Retry Payment**: If payment fails, use `POST /v1/order/{id}/pay-now/`.
 
 ---
 
-## Error Handling
+## ⭐ 6. Reviews & Ratings
 
-### Common Errors
-
-| Error | Status | Cause |
-|-------|--------|-------|
-| `"Not enough stock."` | 400 | Requested quantity exceeds available stock |
-| `"Product variant does not exist."` | 400 | Invalid `variant_id` in add to cart |
-| `"No variant found with the given option values"` | 400 | Selected options don't match any variant |
-| `"Not authenticated"` | 401 | Missing or invalid token for cart APIs |
-
-### Response Format
-```json
-{
-  "detail": "Error message here"
-}
-```
+- **List Reviews**: `GET /v1/review/?product_id={id}`
+- **Create Review**: `POST /v1/review/`
+  - **Rule**: User must have a `delivered` purchase for this product.
+  - **Feature**: If `review_text` is empty, system generates default text (e.g., 5-stars → "I am extremely satisfied...").
+  - **Response**: Includes `rating` and `rating_display` (emoji stars).
 
 ---
 
-## Frontend Integration
+## 🛡️ Role-Based Access
 
-### Key Points
+| Role | Permissions |
+| :--- | :--- |
+| **Buyer** | Create orders, manage cart, leave reviews. |
+| **Seller** | Manage own shop products, process orders, approve returns. |
+| **Admin** | Full system access, category management, shop approval. |
 
-1. **Option IDs are required for filtering:**
-   - Get available_options from product endpoint
-   - Collect `id` from each selected option
-   - Send to available-options and find-variant APIs
-
-2. **Dynamic Filtering:**
-   - Call available-options after each user selection
-   - Pass accumulated selected_option_value_ids
-   - Update UI with remaining options
-
-3. **Stock Handling:**
-   - Check `is_available` in cart items
-   - Show warnings if not available
-   - Prevent checkout if any item unavailable
-
-4. **Image Display:**
-   - CartItemSerializer returns first product image URL in `product_variant_data.image`
-   - Handle null images gracefully
-
-### Example Frontend Pseudo-code
-```javascript
-// Step 1: Load product
-const product = await fetch(`/v1/product/list/${productId}`)
-  .then(r => r.json());
-
-// Show initial options from product.available_options
-
-let selectedIds = [];
-
-// Step 2: On option selection
-async function selectOption(optionValueId) {
-  selectedIds.push(optionValueId);
-  
-  // Get filtered options
-  const filtered = await fetch(
-    `/v1/product/${productId}/available-options/`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ selected_option_value_ids: selectedIds })
-    }
-  ).then(r => r.json());
-  
-  // Update UI with filtered options
-  updateOptions(filtered);
-}
-
-// Step 3: When all options selected
-async function addToCart(quantity) {
-  // Find variant
-  const variant = await fetch(
-    `/v1/product/${productId}/find-variant/`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ option_value_ids: selectedIds })
-    }
-  ).then(r => r.json());
-  
-  // Add to cart
-  const cartItem = await fetch('/v1/cart/add/', {
-    method: 'POST',
-    headers: { 'Authorization': `Token ${token}` },
-    body: JSON.stringify({ 
-      variant_id: variant.variant_id, 
-      quantity: quantity 
-    })
-  }).then(r => r.json());
-  
-  console.log('Item added:', cartItem);
-}
-```
+### Vendor (Seller) Dashboard Endpoints
+- **My Products**: `GET /v1/product/vendor/my-shop-product/`
+- **Shop Orders**: `GET /v1/order/vendor/orders/`
+- **Update Status**: `PATCH /v1/order/vendor/orders/{id}/status/` (pending → confirmed → shipped → delivered).
+- **Return Approval**: `PATCH /v1/order/vendor/orders/{id}/return-approval/` (`approve` or `reject`).
 
 ---
 
-## Authentication
-
-All cart endpoints require token authentication:
-
-```
-Authorization: Token your_auth_token
-```
-
-Get token via `/v1/accounts/login/` or registration endpoint.
-
----
-
-## Base URL
-
-```
-http://localhost:8000/v1/
-```
-
-Replace with your production domain in deployment.
-
----
-
-## Performance Notes
-
-- Product endpoints use `prefetch_related` to minimize database queries
-- Cart total is calculated on-the-fly; consider caching for large carts
-- Option filtering is optimized with indexed lookups
-- Image URLs are absolute paths; ensure MEDIA_ROOT is properly configured
-
----
-
-## Support
-
-For issues or questions, check the main `guide.md` for architecture details or open an issue in the repository.
+## 🧪 Developer Support
+- **Error Format**: All errors return `{ "detail": "message" }` or `{ "field_name": ["error"] }`.
+- **Status Codes**: 200 (Success), 201 (Created), 400 (Validation Error), 401 (Auth Error), 403 (Permission Denied).

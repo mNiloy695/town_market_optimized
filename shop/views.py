@@ -1,5 +1,5 @@
-from .models import Shop, RequestForShop
-from .serializers import ShopSerializer, RequestForShopSerializer
+from .models import Shop, RequestForShop,Market
+from .serializers import ShopSerializer, RequestForShopSerializer,MarketSerializer
 from rest_framework import viewsets, permissions, serializers
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
@@ -67,8 +67,10 @@ class RequestForShopView(ModelViewSet):
 
 
     
-    
-
+class MarketView(ModelViewSet):
+    queryset = Market.objects.all()
+    serializer_class = MarketSerializer
+    http_method_names = ['get']
 
 
 

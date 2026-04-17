@@ -18,61 +18,98 @@ class AddToCartView(APIView):
         variant = serializer.variant
         quantity = serializer.validated_data['quantity']
 
-        if variant.stock < quantity:
-            return Response({'error': 'Not enough stock.'}, status=status.HTTP_400_BAD_REQUEST)
+        from django.db import transaction, models
+        with transaction.atomic():
+            # Refresh variant from DB with lock to prevent race conditions
+            variant = ProductVariant.objects.select_for_update().get(id=variant.id)
+            
+            if variant.available_stock < quantity:
+                return Response({'error': 'Not enough available stock.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        cart, _ = Cart.objects.get_or_create(user=request.user)
-        cart_item, created = CartItem.objects.get_or_create(cart=cart, product_variant=variant)
-        if not created:
-            cart_item.quantity += quantity
-        else:
-            cart_item.quantity = quantity
-        cart_item.save()
-        return Response(CartItemSerializer(cart_item).data, status=status.HTTP_201_CREATED)
+            cart, _ = Cart.objects.get_or_create(user=request.user)
+            cart_item, created = CartItem.objects.get_or_create(cart=cart, product_variant=variant)
+            
+            if not created:
+                cart_item.quantity += quantity
+            else:
+                cart_item.quantity = quantity
+            
+            cart_item.save()
+            
+            # Reserve the stock
+            variant.reserved_quantity = models.F('reserved_quantity') + quantity
+            variant.save(update_fields=['reserved_quantity'])
+
+        return Response(CartItemSerializer(cart_item, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
     
 
 class RemoveFromCartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, variant_id):
-        cart = get_object_or_404(Cart, user=request.user)
-        cart_item = get_object_or_404(
-            CartItem,
-            cart=cart,
-            product_variant_id=variant_id
-        )
-        cart_item.delete()
+        from django.db import transaction, models
+        with transaction.atomic():
+            cart = get_object_or_404(Cart, user=request.user)
+            cart_item = get_object_or_404(
+                CartItem.objects.select_related('product_variant'),
+                cart=cart,
+                product_variant_id=variant_id
+            )
+            
+            quantity_to_release = cart_item.quantity
+            variant = cart_item.product_variant
+            
+            cart_item.delete()
+            
+            # Release reserved stock
+            variant.reserved_quantity = models.F('reserved_quantity') - quantity_to_release
+            variant.save(update_fields=['reserved_quantity'])
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
     
     
 
 class IncrementOrDecrementCartItemView(APIView):
     permission_classes=[IsAuthenticated]
     def patch(self,request,variant_id):
-        cart=get_object_or_404(Cart,user=request.user)
-        cart_item=get_object_or_404(CartItem,cart=cart,product_variant_id=variant_id)
+        from django.db import transaction, models
         quantity=request.data.get('quantity', 1)
-        
         if not isinstance(quantity, int) or quantity <= 0:
             return Response({'error': 'Quantity must be a positive integer.'}, status=status.HTTP_400_BAD_REQUEST)
         
         action=request.data.get('type')
-        
         if action not in ['increment','decrement']:
             return Response({'error':'Invalid type. Must be "increment" or "decrement".'},status=status.HTTP_400_BAD_REQUEST)
-        if action=='increment':
-            if cart_item.product_variant.stock < cart_item.quantity + quantity:
-                return Response({'error': 'Not enough stock.'}, status=status.HTTP_400_BAD_REQUEST)
-            cart_item.quantity+=quantity
+
+        with transaction.atomic():
+            cart=get_object_or_404(Cart,user=request.user)
+            cart_item=get_object_or_404(CartItem.objects.select_for_update(),cart=cart,product_variant_id=variant_id)
+            variant = cart_item.product_variant
+            
+            if action=='increment':
+                if variant.available_stock < quantity:
+                    return Response({'error': 'Not enough available stock.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                cart_item.quantity += quantity
+                variant.reserved_quantity = models.F('reserved_quantity') + quantity
+            else:
+                if cart_item.quantity - quantity <= 0:
+                    quantity_to_release = cart_item.quantity
+                    cart_item.delete()
+                    variant.reserved_quantity = models.F('reserved_quantity') - quantity_to_release
+                    variant.save(update_fields=['reserved_quantity'])
+                    return Response(status=status.HTTP_204_NO_CONTENT)
+                
+                cart_item.quantity -= quantity
+                variant.reserved_quantity = models.F('reserved_quantity') - quantity
+            
             cart_item.save()
-        else:
-            if cart_item.quantity-quantity<=0:
-                cart_item.delete()
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            cart_item.quantity-=quantity
-            cart_item.save()
-        return Response({"message":"Cart item updated successfully.","cart_item": CartItemSerializer(cart_item).data},status=status.HTTP_200_OK)
+            variant.save(update_fields=['reserved_quantity'])
+            
+        return Response({"message":"Cart item updated successfully.","cart_item": CartItemSerializer(cart_item, context={'request': request}).data},status=status.HTTP_200_OK)
+
 
 
 class CartDetailView(APIView):
@@ -85,5 +122,5 @@ class CartDetailView(APIView):
 			'items__product_variant__product__shop'
 		)
 		cart = cart_qs.first()
-		serializer = CartSerializer(cart)
+		serializer = CartSerializer(cart, context={'request': request})
 		return Response(serializer.data)

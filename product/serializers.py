@@ -20,9 +20,10 @@ class ProductCategorySerializer(serializers.ModelSerializer):
         fields='__all__'
 
 class ProductImageSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(required=False, allow_null=True)
     class Meta:
         model=ProductImage
-        fields = ['id', 'image', 'product']
+        fields = ['id', 'image'] # Remove product to avoid nested validation issues
         read_only_fields = ['product']
 
 class ProductCategoryOptionValueSerializer(serializers.ModelSerializer):
@@ -66,7 +67,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 from review.serializers import ReviewSerializer
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(many=True)
-    images = ProductImageSerializer(many=True, required=False)
+    images = ProductImageSerializer(many=True, required=False, allow_null=True)
     shop_data=serializers.SerializerMethodField(read_only=True)
     sub_category_data=serializers.SerializerMethodField(read_only=True)
     available_options = serializers.SerializerMethodField(read_only=True)
@@ -76,7 +77,7 @@ class ProductSerializer(serializers.ModelSerializer):
     
     class Meta:
         model=Product
-        fields=['id', 'name', 'slug', 'shop','shop_data','average_rating','sub_category','sub_category_data', 'variants','images','available_options','created_at','updated_at','eligibale_for_review','reviews']
+        fields=['id', 'name', 'slug', 'shop','shop_data','average_rating','sub_category','sub_category_data', 'weight', 'variants','images','available_options','created_at','updated_at','eligibale_for_review','reviews']
         read_only_fields = ['shop','created_at','updated_at']
     def get_shop_data(self,obj):
         return {
@@ -160,6 +161,7 @@ class ProductSerializer(serializers.ModelSerializer):
         return product
 
     def update(self, instance, validated_data):
+        request = self.context.get('request')
         variants_data = validated_data.pop('variants', None)
         images=validated_data.pop('images',None)
         for attr, value in validated_data.items():
@@ -192,9 +194,38 @@ class ProductSerializer(serializers.ModelSerializer):
             
             instance.variants.exclude(id__in=keep_variants).delete()
         
-        if images is not None:
-            instance.images.all().delete()
-            for image in images:
-                ProductImage.objects.create(product=instance, **image)
+        # Logic to handle images (including Empty List)
+        # We check if 'images' was intended by looking at keys like 'images[0]id' or 'images[0]image'
+        image_keys = [k for k in request.data.keys() if k.startswith('images[')]
+        
+        if image_keys or 'images' in request.data:
+            existing_image_ids = []
+            new_images = []
+            
+            # If DRF parsed them into validated_data
+            if images is not None:
+                for image_data in images:
+                    if isinstance(image_data, dict):
+                        image_id = image_data.get('id')
+                        if image_id:
+                            existing_image_ids.append(image_id)
+                        elif image_data.get('image'):
+                            new_images.append(image_data)
+                    else:
+                        new_images.append({'image': image_data})
+            
+            # Delete images NOT in the keep list
+            # instance.images.exclude(id__in=existing_image_ids).delete()
+            
+            # Create new ones
+            for image_data in new_images:
+                ProductImage.objects.create(product=instance, **image_data)
 
         return instance
+
+
+
+class ProductImageDeleteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=ProductImage
+        fields=['id']

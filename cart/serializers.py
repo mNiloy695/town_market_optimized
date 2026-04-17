@@ -6,11 +6,26 @@ from product.serializers import ProductVariantSerializer
 class CartItemSerializer(serializers.ModelSerializer):
     product_variant = serializers.PrimaryKeyRelatedField(queryset=ProductVariant.objects.all())
     product_variant_data = ProductVariantSerializer(source="product_variant", read_only=True)
+    product_data = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
-        fields = ['id', 'cart', 'product_variant', 'product_variant_data', 'quantity', 'added_at', 'updated_at']
+        fields = ['id', 'cart', 'product_variant', 'product_variant_data', 'product_data', 'quantity', 'added_at', 'updated_at']
         read_only_fields = ['cart', 'added_at', 'updated_at']
+
+    def get_product_data(self, obj):
+        product = obj.product_variant.product
+        from product.serializers import ProductImageSerializer
+        return {
+            'id': product.id,
+            'name': product.name,
+            'images': ProductImageSerializer(product.images.all(), many=True, context=self.context).data,
+            'shop_data': {
+                'shop_name': product.shop.name,
+                'shop_id': product.shop.id
+            }
+        }
+
 
     # def get_product_variant_data(self, obj):
     #     image_url = None

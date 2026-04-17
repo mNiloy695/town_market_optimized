@@ -52,7 +52,7 @@ class RequestForShopSerializer(serializers.ModelSerializer):
         if Shop.objects.filter(owner=user).exists():
             shop = Shop.objects.get(owner=user)
             raise serializers.ValidationError({
-                "message": f"You already have a shop or a request (Status: {shop.status}). Please contact admin."
+                "error": f"You already have a shop or a request (Status: {shop.status}). Please contact admin."
             })
         return attrs
 
@@ -75,3 +75,12 @@ class RequestForShopSerializer(serializers.ModelSerializer):
         )
         
         return request_obj
+
+from .models import Market
+
+class MarketSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=Market
+        fields="__all__"
+    
+    
