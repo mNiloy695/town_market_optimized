@@ -3,7 +3,7 @@ from order.tasks import cancel_expired_pending_orders
 
 
 class Command(BaseCommand):
-    help = 'Cancel orders that have been pending payment for more than 1 hour'
+    help = 'Cancel pending-payment orders that exceeded ORDER_PAYMENT_TIMEOUT_MINUTES'
 
     def handle(self, *args, **options):
         self.stdout.write('Starting auto-cancellation of expired pending orders...')

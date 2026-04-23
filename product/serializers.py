@@ -57,9 +57,22 @@ class ProductVariantOptionValueSerializer(serializers.ModelSerializer):
 class ProductVariantSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
     option_values = ProductVariantOptionValueSerializer(many=True)
+    available_stock = serializers.SerializerMethodField(read_only=True)
+    is_stock = serializers.SerializerMethodField(read_only=True)
+
+    def get_available_stock(self, obj):
+        # Keep stock visibility accurate when some quantity is only reserved.
+        return max(obj.stock - obj.reserved_quantity, 0)
+
+    def get_is_stock(self, obj):
+        return self.get_available_stock(obj) > 0
+
     class Meta:
         model=ProductVariant
-        fields=['id', 'product', 'price', 'description', 'stock', 'option_values']
+        fields=[
+            'id', 'product', 'price', 'description', 'stock',
+            'reserved_quantity', 'available_stock', 'is_stock', 'option_values'
+        ]
         read_only_fields = ['product']
 
 
@@ -68,6 +81,7 @@ from review.serializers import ReviewSerializer
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(many=True)
     images = ProductImageSerializer(many=True, required=False, allow_null=True)
+    is_stock=serializers.SerializerMethodField(read_only=True)
     shop_data=serializers.SerializerMethodField(read_only=True)
     sub_category_data=serializers.SerializerMethodField(read_only=True)
     available_options = serializers.SerializerMethodField(read_only=True)
@@ -77,7 +91,7 @@ class ProductSerializer(serializers.ModelSerializer):
     
     class Meta:
         model=Product
-        fields=['id', 'name', 'slug', 'shop','shop_data','average_rating','sub_category','sub_category_data', 'weight', 'variants','images','available_options','created_at','updated_at','eligibale_for_review','reviews']
+        fields=['id', 'name','is_stock','slug', 'shop','shop_data','average_rating','sub_category','sub_category_data', 'weight', 'variants','images','available_options','created_at','updated_at','eligibale_for_review','reviews']
         read_only_fields = ['shop','created_at','updated_at']
     def get_shop_data(self,obj):
         return {
@@ -89,8 +103,18 @@ class ProductSerializer(serializers.ModelSerializer):
             "sub_category_name":obj.sub_category.name,
             "sub_category_id":obj.sub_category.id,
         }
+        
+    def get_is_stock(self,obj):
+        return obj.variants.annotate(
+            available_stock_calc=models.F('stock') - models.F('reserved_quantity')
+        ).filter(available_stock_calc__gt=0).exists()
+
     def get_available_options(self, obj):
-        variants = obj.variants.filter(stock__gt=0)
+        variants = obj.variants.annotate(
+            available_stock_calc=models.F('stock') - models.F('reserved_quantity')
+        ).filter(available_stock_calc__gt=0).prefetch_related(
+            'option_values__option_value__product_category_option'
+        )
         options = {}
         for variant in variants:
             for ov in variant.option_values.all():

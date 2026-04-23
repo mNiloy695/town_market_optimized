@@ -214,3 +214,27 @@ class OrderTimelineAdmin(admin.ModelAdmin):
         return "System"
     created_by_display.short_description = 'Created By'
 
+
+
+from .models import MoneyDectedButOrderFailed
+
+@admin.register(MoneyDectedButOrderFailed)
+class MoneyDectedButOrderFailedAdmin(admin.ModelAdmin):
+    list_display = ('id', 'order', 'amount', 'transction_id', 'created_at')
+    search_fields = ('order__order_number', 'transction_id', 'phone')
+    readonly_fields = (
+        'order', 'amount', 'transction_id', 'phone',
+        'card_type', 'reason', 'created_at', 'updated_at'
+    )
+    
+    fieldsets = (
+        ('Detection Information', {
+            'fields': ('order', 'amount', 'transction_id', 'phone', 'card_type', 'reason')
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    can_delete = False

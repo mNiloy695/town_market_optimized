@@ -3,9 +3,10 @@ from rest_framework.response import Response
 from .models import Review
 from .serializers import ReviewSerializer
 from rest_framework.pagination import PageNumberPagination
+from django_filters.rest_framework import DjangoFilterBackend
 
 class ReviewPagination(PageNumberPagination):
-    page_size = 20
+    page_size = 10
     max_page_size = 1000
     page_size_query_param = 'page_size'
     page_query_param = 'page'
@@ -15,6 +16,8 @@ class ReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     pagination_class = ReviewPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['product_id']
     def get_queryset(self):
         # Allow filtering by product_id
         queryset = Review.objects.all()

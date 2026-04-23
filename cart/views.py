@@ -18,27 +18,31 @@ class AddToCartView(APIView):
         variant = serializer.variant
         quantity = serializer.validated_data['quantity']
 
-        from django.db import transaction, models
+        from django.db import transaction
         with transaction.atomic():
             # Refresh variant from DB with lock to prevent race conditions
             variant = ProductVariant.objects.select_for_update().get(id=variant.id)
-            
-            if variant.available_stock < quantity:
-                return Response({'error': 'Not enough available stock.'}, status=status.HTTP_400_BAD_REQUEST)
 
             cart, _ = Cart.objects.get_or_create(user=request.user)
-            cart_item, created = CartItem.objects.get_or_create(cart=cart, product_variant=variant)
-            
-            if not created:
-                cart_item.quantity += quantity
-            else:
-                cart_item.quantity = quantity
-            
+            cart_item, created = CartItem.objects.get_or_create(
+                cart=cart,
+                product_variant=variant,
+                defaults={'quantity': 0}
+            )
+
+            requested_quantity = cart_item.quantity + quantity
+            if variant.available_stock < requested_quantity:
+                return Response(
+                    {
+                        'error': f'Not enough available stock. Only {variant.available_stock} left.',
+                        'available': variant.available_stock,
+                        'requested': requested_quantity
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            cart_item.quantity = requested_quantity
             cart_item.save()
-            
-            # Reserve the stock
-            variant.reserved_quantity = models.F('reserved_quantity') + quantity
-            variant.save(update_fields=['reserved_quantity'])
 
         return Response(CartItemSerializer(cart_item, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
@@ -48,7 +52,7 @@ class RemoveFromCartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, variant_id):
-        from django.db import transaction, models
+        from django.db import transaction
         with transaction.atomic():
             cart = get_object_or_404(Cart, user=request.user)
             cart_item = get_object_or_404(
@@ -56,15 +60,7 @@ class RemoveFromCartView(APIView):
                 cart=cart,
                 product_variant_id=variant_id
             )
-            
-            quantity_to_release = cart_item.quantity
-            variant = cart_item.product_variant
-            
             cart_item.delete()
-            
-            # Release reserved stock
-            variant.reserved_quantity = models.F('reserved_quantity') - quantity_to_release
-            variant.save(update_fields=['reserved_quantity'])
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -74,7 +70,7 @@ class RemoveFromCartView(APIView):
 class IncrementOrDecrementCartItemView(APIView):
     permission_classes=[IsAuthenticated]
     def patch(self,request,variant_id):
-        from django.db import transaction, models
+        from django.db import transaction
         quantity=request.data.get('quantity', 1)
         if not isinstance(quantity, int) or quantity <= 0:
             return Response({'error': 'Quantity must be a positive integer.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -85,28 +81,34 @@ class IncrementOrDecrementCartItemView(APIView):
 
         with transaction.atomic():
             cart=get_object_or_404(Cart,user=request.user)
-            cart_item=get_object_or_404(CartItem.objects.select_for_update(),cart=cart,product_variant_id=variant_id)
-            variant = cart_item.product_variant
+            cart_item=get_object_or_404(
+                CartItem.objects.select_related('product_variant').select_for_update(),
+                cart=cart,
+                product_variant_id=variant_id
+            )
+            variant = ProductVariant.objects.select_for_update().get(id=cart_item.product_variant_id)
             
             if action=='increment':
-                if variant.available_stock < quantity:
-                    return Response({'error': 'Not enough available stock.'}, status=status.HTTP_400_BAD_REQUEST)
-                
-                cart_item.quantity += quantity
-                variant.reserved_quantity = models.F('reserved_quantity') + quantity
+                requested_quantity = cart_item.quantity + quantity
+                if variant.available_stock < requested_quantity:
+                    return Response(
+                        {
+                            'error': 'Not enough available stock.',
+                            'available': variant.available_stock,
+                            'requested': requested_quantity
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                cart_item.quantity = requested_quantity
+                cart_item.save()
             else:
                 if cart_item.quantity - quantity <= 0:
-                    quantity_to_release = cart_item.quantity
                     cart_item.delete()
-                    variant.reserved_quantity = models.F('reserved_quantity') - quantity_to_release
-                    variant.save(update_fields=['reserved_quantity'])
                     return Response(status=status.HTTP_204_NO_CONTENT)
                 
                 cart_item.quantity -= quantity
-                variant.reserved_quantity = models.F('reserved_quantity') - quantity
-            
-            cart_item.save()
-            variant.save(update_fields=['reserved_quantity'])
+                cart_item.save()
             
         return Response({"message":"Cart item updated successfully.","cart_item": CartItemSerializer(cart_item, context={'request': request}).data},status=status.HTTP_200_OK)
 

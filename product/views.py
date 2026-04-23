@@ -21,6 +21,7 @@ from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend 
 from rest_framework.filters import SearchFilter
 from django.shortcuts import get_object_or_404
+from django.db.models import F
 
 
 class ProductPagination(PageNumberPagination):
@@ -150,7 +151,9 @@ class ProductAvailableOptionsView(APIView):
         except (ValueError, TypeError):
             selected_ids_set = set()
         
-        variants = product.variants.filter(stock__gt=0).prefetch_related('option_values__option_value__product_category_option')
+        variants = product.variants.annotate(
+            available_stock_calc=F('stock') - F('reserved_quantity')
+        ).filter(available_stock_calc__gt=0).prefetch_related('option_values__option_value__product_category_option')
         
         # Filter variants that have ALL selected option values
         if selected_ids_set:
@@ -200,12 +203,18 @@ class FindVariantView(APIView):
         if not target_set:
             return Response({'error': 'option_value_ids is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        variants = product.variants.filter(stock__gt=0).prefetch_related('option_values')
+        variants = product.variants.annotate(
+            available_stock_calc=F('stock') - F('reserved_quantity')
+        ).filter(available_stock_calc__gt=0).prefetch_related('option_values')
         
         for variant in variants:
-            variant_option_ids = set(variant.option_values.values_list('option_value_id', flat=True))
+            variant_option_ids = {ov.option_value_id for ov in variant.option_values.all()}
             if target_set == variant_option_ids:
-                return Response({'variant_id': variant.id})
+                return Response({
+                    'variant_id': variant.id,
+                    'is_stock': True,
+                    'available_stock': max(variant.available_stock, 0),
+                })
         
         return Response({
             'error': 'No variant found with the given option values',

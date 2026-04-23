@@ -113,6 +113,8 @@ class ProductCategoryOptionValue(models.Model):
     updated_at=models.DateTimeField(auto_now=True,null=True,blank=True)
     def __str__(self):
         return f"{self.product_category_option.name} - {self.value} -id {self.id}"
+    
+
 
 
 
