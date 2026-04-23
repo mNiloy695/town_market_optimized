@@ -98,6 +98,9 @@ class ProductCategoryOption(models.Model):
                 counter += 1
             self.slug = slug
         super().save(*args, **kwargs)
+
+
+        
     
 
 

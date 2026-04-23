@@ -476,37 +476,37 @@ class VendorDashboardStatsView(APIView):
 
 
 class CustomerOrderCancel(APIView):
-    """Allow customers to cancel pending orders"""
+    """Allow customers to cancel master orders based on status constraints"""
     permission_classes = [permissions.IsAuthenticated]
     
-    def post(self, request, shop_order_id):
-        """Cancel a shop order if status is pending"""
+    def post(self, request, order_id):
+        """
+        Cancel a master order (cancels all related shop orders).
+        Rules:
+        - pending_payment: Can always be cancelled
+        - confirmed: Cannot be cancelled
+        """
         try:
-            order = Order.objects.get(
-                id__in=ShopOrder.objects.filter(id=shop_order_id).values('order_id'),
-                user=request.user
-            )
+            order = Order.objects.get(id=order_id, user=request.user)
         except Order.DoesNotExist:
             return Response(
                 {'error': 'Order not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        shop_order = get_object_or_404(ShopOrder, id=shop_order_id, order=order)
+        # Attempt to cancel the order
+        success, message = order.cancel_order(reason='Order cancelled by customer')
         
-        if shop_order.status not in ['pending', 'confirmed']:
+        if success:
             return Response(
-                {'error': 'Only pending or confirmed orders can be cancelled'},
+                {'message': message},
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {'error': message},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Use the centralized fail_order logic to handle status and stock release
-        shop_order.order.fail_order(reason='Order cancelled by customer')
-        
-        return Response(
-            {'message': 'Order cancelled successfully'},
-            status=status.HTTP_200_OK
-        )
 
 
 class PaymentConfirmationView(APIView):
@@ -750,4 +750,3 @@ class PayNowView(APIView):
             return Response({
                 'error': payment_response.get('failedreason', 'Could not initiate payment')
             }, status=status.HTTP_400_BAD_REQUEST)
-

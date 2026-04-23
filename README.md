@@ -101,7 +101,85 @@ Town Market uses a **Booking Fee + Cash on Delivery** model.
 
 ---
 
-## 🛡️ Role-Based Access
+## � 7. Customer Order Management
+
+### View Orders
+- **My Orders**: `GET /v1/order/list/` (Paginated)
+  - Response includes all orders with their statuses and shop order details.
+- **Order Detail**: `GET /v1/order/detail/{order_id}/`
+  - Includes full order info, items, timeline, and **cancellation eligibility**.
+
+### Cancel Order
+- **Endpoint**: `POST /v1/order/{order_id}/cancel/`
+- **Authentication**: Required (JWT Bearer token)
+- **Description**: Cancel the entire master order and all related shop orders at once
+- **Business Logic**:
+  | Status | Can Cancel? | Details |
+  | :--- | :--- | :--- |
+  | **pending_payment** | ✅ Yes | Can cancel anytime before payment |
+  | **confirmed** | ✅ Yes (20 min window) | Can cancel only within 20 minutes of payment confirmation |
+  | **processing** | ❌ No | Once shop begins processing, cancellation unavailable |
+  | **failed** | ❌ No | Cannot cancel failed orders |
+  | **cancelled** | ❌ No | Already cancelled |
+
+- **When order is cancelled**:
+  - ✅ All related shop orders are automatically cancelled
+  - ✅ Reserved stock is released back to inventory
+  - ✅ Payment status reverts (if not yet processed)
+  - ✅ Timeline is updated for each shop order
+
+- **Response (Success - 200)**:
+  ```json
+  {
+    "message": "Order cancelled successfully"
+  }
+  ```
+
+- **Response (Error - 400)**:
+  ```json
+  {
+    "error": "Cancellation window closed. Order was confirmed 25 minutes ago. You can only cancel within 20 minutes of confirmation."
+  }
+  ```
+
+### Cancellation Eligibility Info in Order Detail
+The order detail response includes:
+- `can_be_cancelled` (boolean) - Whether cancellation is currently allowed
+- `cancellation_reason` (string or null) - Explanation if cancellation is not allowed
+- `confirmed_at` (timestamp) - When the order was confirmed (used for 20-minute window)
+
+Example response:
+```json
+{
+  "id": 123,
+  "order_number": "ORD-20260423-ABC123",
+  "status": "confirmed",
+  "confirmed_at": "2026-04-23T10:30:00Z",
+  "can_be_cancelled": true,
+  "cancellation_reason": null,
+  "shop_orders": [
+    {
+      "id": 1,
+      "shop_name": "Shop A",
+      "status": "confirmed",
+      "total": 2500.00
+    },
+    {
+      "id": 2,
+      "shop_name": "Shop B",
+      "status": "confirmed",
+      "total": 2500.00
+    }
+  ],
+  "total_amount": 5000.00
+}
+```
+
+**Note**: Cancelling a master order will cancel ALL associated shop orders simultaneously and release their reserved stock.
+
+---
+
+## �🛡️ Role-Based Access
 
 | Role | Permissions |
 | :--- | :--- |

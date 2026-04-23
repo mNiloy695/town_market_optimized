@@ -74,6 +74,7 @@ class Order(models.Model):
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)  # When payment was confirmed
     
     class Meta:
         ordering = ['-created_at']
@@ -105,6 +106,7 @@ class Order(models.Model):
         with transaction.atomic():
             self.is_paid = True
             self.status = 'confirmed'
+            self.confirmed_at = timezone.now()
             self.save()
 
             # Clear user's cart upon successful payment
@@ -166,6 +168,66 @@ class Order(models.Model):
                         action='cancelled',
                         description=reason or 'Payment failed - reserved stock released',
                     )
+    
+    def can_be_cancelled(self):
+        """
+        Check if the master order can be cancelled.
+        Returns: (can_cancel: bool, reason: str or None)
+        
+        Rules:
+        - pending_payment: Can always be cancelled (before payment)
+        - confirmed: Cannot be cancelled
+        - Other statuses: Cannot be cancelled
+        """
+        if self.status == 'pending_payment':
+            return True, None
+        
+        elif self.status == 'confirmed':
+            return False, "Confirmed orders cannot be cancelled."
+        
+        else:
+            return False, f"Cannot cancel order in '{self.status}' status. Only 'pending_payment' orders can be cancelled."
+    
+    def cancel_order(self, reason=None):
+        """
+        Cancel the master order and all related shop orders.
+        Releases reserved stock for cancellable order items.
+        Returns: (success: bool, message: str)
+        """
+        from django.db import transaction
+        
+        # Check if cancellation is allowed
+        can_cancel, error_reason = self.can_be_cancelled()
+        if not can_cancel:
+            return False, error_reason
+        
+        with transaction.atomic():
+            # Cancel the master order
+            self.status = 'cancelled'
+            self.save(update_fields=['status'])
+            
+            # Cancel all related shop orders and release stock
+            for shop_order in self.shop_orders.all():
+                if shop_order.status in ['pending', 'confirmed']:
+                    # Release reserved stock for each item
+                    for item in shop_order.items.select_related('product_variant').all():
+                        variant = item.product_variant
+                        variant.reserved_quantity = models.F('reserved_quantity') - item.quantity
+                        variant.save(update_fields=['reserved_quantity'])
+                    
+                    # Mark shop order as cancelled
+                    shop_order.status = 'cancelled'
+                    shop_order.save(update_fields=['status'])
+                    
+                    # Log to timeline
+                    OrderTimeline.objects.create(
+                        shop_order=shop_order,
+                        action='cancelled',
+                        description=reason or 'Order cancelled by customer',
+                        created_by=self.user
+                    )
+        
+        return True, "Order cancelled successfully"
 
 
 class ShopOrder(models.Model):

@@ -94,6 +94,8 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
 class OrderDetailSerializer(serializers.ModelSerializer):
     """Detailed order serializer for customers"""
     shop_orders = ShopOrderDetailSerializer(many=True, read_only=True)
+    can_be_cancelled = serializers.SerializerMethodField()
+    cancellation_reason = serializers.SerializerMethodField()
     
     
     class Meta:
@@ -102,24 +104,48 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'id', 'order_number', 'total_amount', 'status', 'is_paid',
             'shipping_address', 'shipping_city', 'shipping_postal_code',
             'shipping_country', 'phone_number', 'payment_method',
-            'shop_orders', 'created_at', 'updated_at'
+            'shop_orders', 'created_at', 'updated_at', 'confirmed_at',
+            'can_be_cancelled', 'cancellation_reason'
         ]
-        read_only_fields = ['id', 'order_number', 'total_amount', 'status', 'created_at']
+        read_only_fields = ['id', 'order_number', 'total_amount', 'status', 'created_at', 'updated_at', 'confirmed_at']
+    
+    def get_can_be_cancelled(self, obj):
+        """Check if order can be cancelled"""
+        can_cancel, _ = obj.can_be_cancelled()
+        return can_cancel
+    
+    def get_cancellation_reason(self, obj):
+        """Get reason if order cannot be cancelled"""
+        can_cancel, reason = obj.can_be_cancelled()
+        return reason if not can_cancel else None
 
 
 class OrderListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for order lists"""
     shop_count = serializers.SerializerMethodField()
+    can_be_cancelled = serializers.SerializerMethodField()
+    cancellation_reason = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
         fields = [
-            'id', 'order_number', 'total_amount', 'status', 'shop_count', 'created_at'
+            'id', 'order_number', 'total_amount', 'status', 'shop_count', 'created_at',
+            'can_be_cancelled', 'cancellation_reason'
         ]
         read_only_fields = fields
     
     def get_shop_count(self, obj):
         return obj.shop_orders.count()
+    
+    def get_can_be_cancelled(self, obj):
+        """Check if order can be cancelled"""
+        can_cancel, _ = obj.can_be_cancelled()
+        return can_cancel
+    
+    def get_cancellation_reason(self, obj):
+        """Get reason if order cannot be cancelled"""
+        can_cancel, reason = obj.can_be_cancelled()
+        return reason if not can_cancel else None
 
 
 class CheckoutSerializer(serializers.Serializer):
@@ -224,9 +250,9 @@ class ShopOrderStatusUpdateSerializer(serializers.ModelSerializer):
             'confirmed': ['processing', 'cancelled'],
             'processing': ['shipped', 'cancelled'],
             'shipped': ['delivered'],
-            'delivered': [],
+            'delivered': ['return_requested','returned'],
             'cancelled': [],
-            'return_requested': ['returned', 'cancelled'],
+            'return_requested': ['returned'],
             'returned': [],
         }
         
