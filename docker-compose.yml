@@ -9,6 +9,7 @@ services:
       - media_volume:/app/media
     ports:
       - "8000:8000"
+    restart: always
     env_file:
       - .env
     depends_on:
@@ -25,6 +26,7 @@ services:
       - .:/app
     env_file:
       - .env
+    restart: always
     depends_on:
       - db
       - redis
@@ -39,6 +41,7 @@ services:
       - .:/app
     env_file:
       - .env
+    restart: always
     depends_on:
       - db
       - redis
@@ -54,16 +57,32 @@ services:
       - redis_data:/data
     networks:
       - townmarket
+    restart: always
+    env_file:
+      - .env
 
   # PostgreSQL Database
   db:
     image: postgres:15-alpine
-    env_file:
-      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5430:5432"
+    networks:
+      - townmarket
+    restart: always
+    env_file:
+      - .env
+  ngrok:
+    image: ngrok/ngrok:latest
+    command: http web:8000
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN} # ✅ use env file instead
+    ports:
+      - "4040:4040"
+    restart: always
+    depends_on:
+      - web
     networks:
       - townmarket
 

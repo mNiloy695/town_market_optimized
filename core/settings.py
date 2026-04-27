@@ -29,6 +29,9 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 #https://overrigged-botanically-lila.ngrok-free.dev cors
 
 ALLOWED_HOSTS = ['*']
+# Trust proxy headers (ngrok/reverse proxy) so absolute URLs use HTTPS.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
