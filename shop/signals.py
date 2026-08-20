@@ -4,25 +4,38 @@ from .models import RequestForShop, Shop
 
 @receiver(pre_save, sender=Shop)
 def update_shop_status(sender, instance, **kwargs):
+    # Retrieve the old instance to check if status is actually changing
+    old_instance = None
+    if instance.pk:
+        try:
+            old_instance = Shop.objects.get(pk=instance.pk)
+        except Shop.DoesNotExist:
+            pass
+
+    status_changed = not old_instance or old_instance.status != instance.status
+
     if instance.status == 'approved':
-        instance.is_active = True
-        instance.is_deactivated = False
+        if status_changed:
+            instance.is_active = True
+            instance.is_deactivated = False
         if hasattr(instance, 'owner'):
             owner = instance.owner
             owner.role = "seller"
             owner.is_request_for_shop = "request_approved"
             owner.save(update_fields=['role', 'is_request_for_shop'])
     elif instance.status == 'rejected':
-        instance.is_active = False
-        instance.is_deactivated = True
+        if status_changed:
+            instance.is_active = False
+            instance.is_deactivated = True
         if hasattr(instance, 'owner'):
             owner = instance.owner
             owner.role = "buyer"
             owner.is_request_for_shop = "request_not_requested"
             owner.save(update_fields=['role', 'is_request_for_shop'])
     elif instance.status == 'pending':
-        instance.is_active = False
-        instance.is_deactivated = False
+        if status_changed:
+            instance.is_active = False
+            instance.is_deactivated = False
         if hasattr(instance, 'owner'):
             owner = instance.owner
             owner.role = "buyer"

@@ -104,10 +104,20 @@ class Order(models.Model):
         from django.db import transaction
         
         with transaction.atomic():
-            self.is_paid = True
-            self.status = 'confirmed'
-            self.confirmed_at = timezone.now()
-            self.save()
+            # Row-level lock on the Order record to guarantee idempotency and avoid race conditions
+            locked_order = Order.objects.select_for_update().get(id=self.id)
+            if locked_order.status == 'confirmed':
+                return
+            
+            locked_order.is_paid = True
+            locked_order.status = 'confirmed'
+            locked_order.confirmed_at = timezone.now()
+            locked_order.save(update_fields=['is_paid', 'status', 'confirmed_at'])
+            
+            # Sync local fields
+            self.is_paid = locked_order.is_paid
+            self.status = locked_order.status
+            self.confirmed_at = locked_order.confirmed_at
 
             # Clear user's cart upon successful payment
             from cart.models import Cart
@@ -118,8 +128,8 @@ class Order(models.Model):
             # For each shop order, reduce actual stock
             for shop_order in self.shop_orders.filter(status='pending'):
                 for item in shop_order.items.select_related('product_variant').all():
-                    # Reduce actual stock and reserved quantity atomically
-                    variant = item.product_variant
+                    # Lock the variant to avoid stock calculation race conditions
+                    variant = ProductVariant.objects.select_for_update().get(id=item.product_variant_id)
                     variant.stock = models.F('stock') - item.quantity
                     variant.reserved_quantity = models.F('reserved_quantity') - item.quantity
                     variant.save(update_fields=['stock', 'reserved_quantity'])
@@ -145,29 +155,35 @@ class Order(models.Model):
         from django.db import transaction
         
         with transaction.atomic():
-            # Only process if not already finalized
-            if self.status not in ['confirmed', 'cancelled', 'failed']:
-                self.status = 'failed'
-                self.save()
+            # Acquire row lock on Order to prevent race conditions
+            locked_order = Order.objects.select_for_update().get(id=self.id)
+            if locked_order.status in ['confirmed', 'cancelled', 'failed']:
+                return
+            
+            locked_order.status = 'failed'
+            locked_order.save(update_fields=['status'])
+            
+            # Sync local field
+            self.status = locked_order.status
+            
+            # Release reserved stock for all associated shop orders
+            for shop_order in self.shop_orders.filter(status='pending'):
+                for item in shop_order.items.select_related('product_variant').all():
+                    # Lock the variant to avoid stock calculation race conditions
+                    variant = ProductVariant.objects.select_for_update().get(id=item.product_variant_id)
+                    variant.reserved_quantity = models.F('reserved_quantity') - item.quantity
+                    variant.save(update_fields=['reserved_quantity'])
                 
-                # Release reserved stock for all associated shop orders
-                for shop_order in self.shop_orders.filter(status='pending'):
-                    # Use select_related and bulk-like updates where possible
-                    for item in shop_order.items.select_related('product_variant').all():
-                        variant = item.product_variant
-                        variant.reserved_quantity = models.F('reserved_quantity') - item.quantity
-                        variant.save(update_fields=['reserved_quantity'])
-                    
-                    shop_order.status = 'cancelled'
-                    shop_order.save(update_fields=['status'])
-                    
-                    # Log to timeline
-                    from .models import OrderTimeline
-                    OrderTimeline.objects.create(
-                        shop_order=shop_order,
-                        action='cancelled',
-                        description=reason or 'Payment failed - reserved stock released',
-                    )
+                shop_order.status = 'cancelled'
+                shop_order.save(update_fields=['status'])
+                
+                # Log to timeline
+                from .models import OrderTimeline
+                OrderTimeline.objects.create(
+                    shop_order=shop_order,
+                    action='cancelled',
+                    description=reason or 'Payment failed - reserved stock released',
+                )
     
     def can_be_cancelled(self):
         """
@@ -176,44 +192,87 @@ class Order(models.Model):
         
         Rules:
         - pending_payment: Can always be cancelled (before payment)
-        - confirmed: Cannot be cancelled
-        - Other statuses: Cannot be cancelled
+        - confirmed: Can cancel only within 20 minutes of payment confirmation (confirmed_at).
+          Also, if any associated shop order has status other than 'pending' or 'confirmed',
+          it cannot be cancelled (shop begins processing).
+        - Other statuses: Cannot be cancelled.
         """
         if self.status == 'pending_payment':
             return True, None
         
         elif self.status == 'confirmed':
-            return False, "Confirmed orders cannot be cancelled."
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            # Check if any associated shop order is already processing or completed
+            if self.shop_orders.exclude(status__in=['pending', 'confirmed']).exists():
+                return False, "Once shop begins processing, cancellation unavailable."
+            
+            if not self.confirmed_at:
+                return False, "Order confirmation time is missing."
+            
+            time_elapsed = timezone.now() - self.confirmed_at
+            if time_elapsed > timedelta(minutes=20):
+                minutes_elapsed = int(time_elapsed.total_seconds() / 60)
+                return False, f"Cancellation window closed. Order was confirmed {minutes_elapsed} minutes ago. You can only cancel within 20 minutes of confirmation."
+            
+            return True, None
         
         else:
-            return False, f"Cannot cancel order in '{self.status}' status. Only 'pending_payment' orders can be cancelled."
+            return False, f"Cannot cancel order in '{self.status}' status. Only 'pending_payment' or 'confirmed' orders (within 20 minutes) can be cancelled."
     
     def cancel_order(self, reason=None):
         """
         Cancel the master order and all related shop orders.
-        Releases reserved stock for cancellable order items.
+        Releases reserved stock or restores actual stock for cancellable order items.
         Returns: (success: bool, message: str)
         """
         from django.db import transaction
         
-        # Check if cancellation is allowed
-        can_cancel, error_reason = self.can_be_cancelled()
-        if not can_cancel:
-            return False, error_reason
-        
         with transaction.atomic():
-            # Cancel the master order
-            self.status = 'cancelled'
-            self.save(update_fields=['status'])
+            # Acquire row lock on Order
+            locked_order = Order.objects.select_for_update().get(id=self.id)
             
-            # Cancel all related shop orders and release stock
-            for shop_order in self.shop_orders.all():
-                if shop_order.status in ['pending', 'confirmed']:
+            # Since can_be_cancelled reads statuses, run it on the locked object
+            can_cancel, error_reason = locked_order.can_be_cancelled()
+            if not can_cancel:
+                return False, error_reason
+            
+            # Cancel the master order
+            locked_order.status = 'cancelled'
+            locked_order.save(update_fields=['status'])
+            
+            # Sync local field
+            self.status = locked_order.status
+            
+            # Cancel all related shop orders and restore/release stock
+            for shop_order in locked_order.shop_orders.all():
+                if shop_order.status == 'pending':
                     # Release reserved stock for each item
                     for item in shop_order.items.select_related('product_variant').all():
-                        variant = item.product_variant
+                        # Lock variant
+                        variant = ProductVariant.objects.select_for_update().get(id=item.product_variant_id)
                         variant.reserved_quantity = models.F('reserved_quantity') - item.quantity
                         variant.save(update_fields=['reserved_quantity'])
+                    
+                    # Mark shop order as cancelled
+                    shop_order.status = 'cancelled'
+                    shop_order.save(update_fields=['status'])
+                    
+                    # Log to timeline
+                    OrderTimeline.objects.create(
+                        shop_order=shop_order,
+                        action='cancelled',
+                        description=reason or 'Order cancelled by customer',
+                        created_by=self.user
+                    )
+                elif shop_order.status == 'confirmed':
+                    # Restore actual stock (stock was already deducted during confirm_payment)
+                    for item in shop_order.items.select_related('product_variant').all():
+                        # Lock variant
+                        variant = ProductVariant.objects.select_for_update().get(id=item.product_variant_id)
+                        variant.stock = models.F('stock') + item.quantity
+                        variant.save(update_fields=['stock'])
                     
                     # Mark shop order as cancelled
                     shop_order.status = 'cancelled'

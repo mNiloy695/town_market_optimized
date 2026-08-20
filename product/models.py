@@ -59,6 +59,7 @@ class Product(models.Model):
     name=models.CharField(max_length=200)
     slug=models.SlugField(max_length=200,unique=True,blank=True,null=True)
     weight=models.DecimalField(max_digits=10,decimal_places=2,default=0.00) # in gm
+    is_active=models.BooleanField(default=True, db_index=True)
     created_at=models.DateTimeField(auto_now_add=True,null=True,blank=True)
     updated_at=models.DateTimeField(auto_now=True,null=True,blank=True)
     shop=models.ForeignKey('shop.Shop',on_delete=models.CASCADE,related_name='products')

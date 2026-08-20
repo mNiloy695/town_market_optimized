@@ -209,7 +209,8 @@ CSRF_TRUSTED_ORIGINS = [
     'https://overrigged-botanically-lila.ngrok-free.dev',
     "http://172.24.0.1:3000",
     "http://localhost:3000",
-    "https://unluckier-dorie-nontumultuous.ngrok-free.dev"
+    "https://unluckier-dorie-nontumultuous.ngrok-free.dev",
+    'https://outmatch-marvelous-mummify.ngrok-free.dev'
 ]
 CORS_ALLOW_HEADERS = [
     'accept',

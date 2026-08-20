@@ -60,13 +60,28 @@ class CustomProductManagePermission(permissions.BasePermission):
 from rest_framework.decorators import action
 from review.serializers import ReviewSerializer
 class ProductListView(ModelViewSet):
-    queryset=Product.objects.select_related('shop','sub_category').prefetch_related('variants__option_values__option_value__product_category_option', 'images').all()
+    queryset = Product.objects.none()
     serializer_class=ProductSerializer
     permission_classes = [CustomProductManagePermission]
     pagination_class = ProductPagination
     filter_backends=[DjangoFilterBackend,SearchFilter]
     filterset_fields=['shop__id']
     search_fields=['name','sub_category__slug','shop__slug','sub_category__parent__slug']
+
+    def get_queryset(self):
+        queryset = Product.objects.select_related('shop','sub_category').prefetch_related(
+            'variants__option_values__option_value__product_category_option', 'images'
+        ).all()
+        # For public views (GET/HEAD/OPTIONS), filter to active products and active/approved shops
+        if self.request.method in permissions.SAFE_METHODS:
+            queryset = queryset.filter(
+                is_active=True,
+                shop__owner__is_active=True,
+                shop__is_active=True,
+                shop__status='approved',
+                shop__is_deactivated=False
+            )
+        return queryset
 
     def perform_create(self, serializer):
         user = self.request.user

@@ -69,17 +69,30 @@ class OrderAdmin(admin.ModelAdmin):
 @admin.register(ShopOrder)
 class ShopOrderAdmin(admin.ModelAdmin):
     """Admin configuration for ShopOrders"""
-    list_display = ('id', 'shop_name', 'order_number_display', 'total_display', 'status_badge', 'created_at_display')
-    list_filter = ('status', 'shop', 'created_at')
+    list_display = ('id', 'shop_name', 'order_number_display', 'total_display', 'status_badge', 'commission_given', 'created_at_display')
+    list_filter = ('status', 'commission_given', 'shop', 'created_at')
+    list_editable = ('commission_given',)
     search_fields = ('shop__name', 'order__order_number', 'order__user__name')
     readonly_fields = ('order_number_display', 'created_at', 'updated_at', 'get_items_count')
     
+    actions = ['mark_commission_paid', 'mark_commission_unpaid']
+    
+    @admin.action(description="Mark selected orders as commission paid")
+    def mark_commission_paid(self, request, queryset):
+        updated = queryset.update(commission_given=True)
+        self.message_user(request, f"{updated} shop orders marked as commission paid.")
+        
+    @admin.action(description="Mark selected orders as commission unpaid")
+    def mark_commission_unpaid(self, request, queryset):
+        updated = queryset.update(commission_given=False)
+        self.message_user(request, f"{updated} shop orders marked as commission unpaid.")
+
     fieldsets = (
         ('Order Information', {
             'fields': ('order', 'shop', 'order_number_display')
         }),
         ('Pricing', {
-            'fields': ('subtotal', 'tax', 'shipping_fee', 'discount', 'total'),
+            'fields': ('subtotal', 'tax', 'shipping_fee', 'discount', 'total', 'commission_given'),
             'classes': ('wide',)
         }),
         ('Status & Tracking', {
