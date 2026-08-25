@@ -5,6 +5,9 @@ from datetime import timedelta
 from django.db import transaction
 from django.db.models import Sum
 from .models import Order
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -47,7 +50,7 @@ def cancel_expired_pending_orders():
                 
         except Exception as e:
             # Log the error but continue with other orders
-            print(f"Error cancelling order {order.id}: {str(e)}")
+            logger.error("Error cancelling order %s: %s", order.id, e)
             continue
     
     return {

@@ -233,16 +233,16 @@ from .models import MoneyDectedButOrderFailed
 
 @admin.register(MoneyDectedButOrderFailed)
 class MoneyDectedButOrderFailedAdmin(admin.ModelAdmin):
-    list_display = ('id', 'order', 'amount', 'transction_id', 'created_at')
-    search_fields = ('order__order_number', 'transction_id', 'phone')
+    list_display = ('id', 'order', 'amount', 'transaction_id', 'created_at')
+    search_fields = ('order__order_number', 'transaction_id', 'phone')
     readonly_fields = (
-        'order', 'amount', 'transction_id', 'phone',
+        'order', 'amount', 'transaction_id', 'phone',
         'card_type', 'reason', 'created_at', 'updated_at'
     )
     
     fieldsets = (
         ('Detection Information', {
-            'fields': ('order', 'amount', 'transction_id', 'phone', 'card_type', 'reason')
+            'fields': ('order', 'amount', 'transaction_id', 'phone', 'card_type', 'reason')
         }),
         ('Metadata', {
             'fields': ('created_at', 'updated_at'),

@@ -1,24 +1,115 @@
-redis-server --port 6380
-celery -A core worker -l info
+# Town Market Commands
+# =================
+# This file contains all available commands for running and managing the Town Market application.
 
-# Auto-Order Cancellation System Commands
-# ======================================
+# Quick Start Commands
+# ------------------
+# Start both backend and frontend in development mode
+bash run.sh dev
 
-# Start Celery Beat (Scheduler) - runs periodic tasks
-celery -A core beat -l info
+# Start both backend and frontend in production mode
+bash run.sh prod
 
-# Alternative: Run auto-cancellation manually
-python manage.py cancel_expired_orders
+# Start Town Market with Docker Compose (dev or prod config)
+bash run.sh docker
 
-# Full setup: Run all services
-# Terminal 1: Redis
-redis-server --port 6380
-# Terminal 2: Celery Worker
-celery -A core worker -l info
-# Terminal 3: Celery Beat
-celery -A core beat -l info
-# Terminal 4: Django Server
+# Stop all running services (Ctrl+C in the terminal)
+# Ctrl+C
+
+# Django Management Commands
+# ------------------------
+# Run database migrations
+python manage.py migrate
+
+# Create superuser
+python manage.py createsuperuser
+
+# Run development server
 python manage.py runserver
 
-# Cron job alternative (add to crontab):
-# */15 * * * * /path/to/venv/bin/python /path/to/project/manage.py cancel_expired_orders
+# Run production server with gunicorn
+# gunicorn core.wsgi:application
+
+# Run Celery worker
+celery -A core worker -l info
+
+# Run Celery beat (scheduler)
+celery -A core beat -l info
+
+# Cancel expired orders
+python manage.py cancel_expired_orders
+
+# Check system checks
+python manage.py check
+
+# Collect static files
+python manage.py collectstatic
+
+
+# Frontend Commands
+# ---------------
+# Start React development server (port 3000)
+# cd /home/salahuddin/Town/frontend && npm run dev
+
+# Build React production build
+# cd /home/salahuddin/Town/frontend && npm run build
+
+# Lint React code
+# cd /home/salahuddin/Town/frontend && npm run lint
+
+
+# Docker Commands
+# ------------
+# Build and start all Docker services
+docker-compose up --build -d
+
+# Stop Docker services
+docker-compose down
+
+# View Docker logs
+docker-compose logs -f
+
+# Run Django management commands inside Docker
+docker-compose exec web python manage.py <command>
+
+# Run migrations inside Docker
+docker-compose exec web python manage.py migrate
+
+# Run Town Market in development mode (SQLite)
+bash run.sh dev
+
+# Start Town Market in production mode (PostgreSQL)
+bash run.sh prod
+
+# Start Town Market with Docker Compose (dev or prod config)
+bash run.sh docker
+
+# Connect to PostgreSQL database
+# psql -U townmarket -d townmarket -h localhost -p 5432
+
+# Backup database
+# pg_dump -U townmarket -d townmarket > backup.sql
+
+# Restore database
+# psql -U townmarket -d townmarket < backup.sql
+
+
+# Cloudflare Services
+# -----------------
+# Check R2 storage status
+python -c "from core.cloudflare import is_r2_configured; print('R2 Configured:', is_r2_configured())"
+
+# Generate R2 URL
+python -c "from core.cloudflare import r2; print(r2.url('product_images/logo.png'))"
+
+
+# Service Status
+# ------------
+# Check all service status
+docker-compose ps
+
+# Check Python environment
+python3 --version
+
+# Check Node.js version
+node --version

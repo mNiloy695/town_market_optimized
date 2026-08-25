@@ -16,6 +16,9 @@ from django.conf import settings
 from .models import ShopOrder, OrderItem, OrderTimeline,Order
 from accounts.models import CustomUser
 from invoice.models import Invoice
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @receiver(post_save,sender=Order)
@@ -89,7 +92,7 @@ def send_vendor_order_notification(shop_order):
         # Uncomment in production
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [vendor.email])
     except Exception as e:
-        print(f"Error sending vendor notification: {str(e)}")
+        logger.error("Error sending vendor notification: %s", e)
 
 
 def send_customer_status_notification(shop_order):
@@ -123,7 +126,7 @@ def send_customer_status_notification(shop_order):
         # Uncomment in production
         # send_mail(subject, full_message, settings.DEFAULT_FROM_EMAIL, [customer.email])
     except Exception as e:
-        print(f"Error sending customer notification: {str(e)}")
+        logger.error("Error sending customer notification: %s", e)
 
 
 def send_vendor_status_notification(shop_order):
@@ -149,7 +152,7 @@ def send_vendor_status_notification(shop_order):
         # Uncomment in production
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [vendor.email])
     except Exception as e:
-        print(f"Error sending vendor status notification: {str(e)}")
+        logger.error("Error sending vendor status notification: %s", e)
 
 
 # celery task for automated order processing (advanced feature)

@@ -21,3 +21,12 @@ class Review(models.Model):
     
     def __str__(self):
         return f"{self.user} - {self.product} - {self.rating}"
+
+    class Meta:
+        # NEW-A9: Database-level duplicate prevention (belt-and-suspenders with serializer check).
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'product'],
+                name='unique_review_per_user_product',
+            )
+        ]

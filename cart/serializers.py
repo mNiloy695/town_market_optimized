@@ -78,7 +78,20 @@ class AddToCartSerializer(serializers.Serializer):
 
     def validate_variant_id(self, value):
         try:
-            self.variant = ProductVariant.objects.get(id=value)
+            self.variant = ProductVariant.objects.select_related(
+                'product__shop__owner'
+            ).get(id=value)
         except ProductVariant.DoesNotExist:
             raise serializers.ValidationError("Product variant does not exist.")
+
+        product = self.variant.product
+        shop = product.shop
+
+        if not product.is_active:
+            raise serializers.ValidationError("Product is not available.")
+        if not shop.is_active or shop.is_deactivated or shop.status != 'approved':
+            raise serializers.ValidationError("Product is not available.")
+        if not shop.owner.is_active:
+            raise serializers.ValidationError("Product is not available.")
+
         return value

@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────────
+#  DEVELOPMENT Docker mode
+#  • Django runs directly on port 8000 (no Nginx)
+#  • Hot-reload via volume mount
+#  • Uses runserver (not gunicorn)
+#
+#  Usage:  sudo bash run.sh docker-dev
+# ─────────────────────────────────────────────────────────────
+include:
+  - docker-compose.base.yml
+
+services:
+  web:
+    build: .
+    container_name: townmarket_web_dev
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app                              # live code reload
+      - townmarket_static_volume:/app/staticfiles
+      - townmarket_media_volume:/app/media
+    ports:
+      - "8000:8000"                         # direct Django, no proxy
+    env_file:
+      - .env
+    environment:
+      - DEBUG=True
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - townmarket_net
+    restart: "no"                           # dev: let it crash visibly

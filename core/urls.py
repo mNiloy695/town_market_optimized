@@ -15,5 +15,5 @@ urlpatterns = [
     path("v1/review/",include("review.urls"))
     
 ]
-if settings.DEBUG or True:
+if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

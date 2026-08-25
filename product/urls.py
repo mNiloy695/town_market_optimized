@@ -2,7 +2,8 @@ from django.urls import path,include
 from .views import (
     ProductCategoryListView, ParentProductCategoryListView, ProductImageView,
     ProductListView, ProductCategoryOptionListView, ProductCategoryOptionValueListView,
-    ProductAvailableOptionsView, FindVariantView,MyShopProductView,ProductImageDeleteView
+    ProductAvailableOptionsView, FindVariantView,MyShopProductView,ProductImageDeleteView,
+    RestockView
 )
 
 from rest_framework.routers import DefaultRouter
@@ -18,5 +19,6 @@ urlpatterns=[
     path('product-category-option-value/',ProductCategoryOptionValueListView.as_view()),
     path('<int:pk>/available-options/', ProductAvailableOptionsView.as_view(), name='product-available-options'),
     path('<int:pk>/find-variant/', FindVariantView.as_view(), name='find-variant'),
-    path('vendor/my-shop-product/',MyShopProductView.as_view(), name='my-shop-product')
+    path('vendor/my-shop-product/',MyShopProductView.as_view(), name='my-shop-product'),
+    path('variant/<int:variant_id>/restock/', RestockView.as_view(), name='variant-restock'),
 ]

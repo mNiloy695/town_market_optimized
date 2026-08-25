@@ -12,32 +12,55 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
-from unicodedata import decimal
 from decouple import config
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
 from datetime import timedelta
 from decimal import Decimal
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+# ✅ Security Settings
+# ✅ Never hardcode secrets - use environment variables
+# ✅ Production-ready defaults
+
+# ✅ SECRET_KEY
 SECRET_KEY = config('SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
+# ✅ DEBUG
 DEBUG = config('DEBUG', default=False, cast=bool)
-#https://overrigged-botanically-lila.ngrok-free.dev cors
 
-ALLOWED_HOSTS = ['*']
-# Trust proxy headers (ngrok/reverse proxy) so absolute URLs use HTTPS.
+# ✅ ALLOWED_HOSTS - Production ready, never ['*']
+ALLOWED_HOSTS = config(
+    'ALLOWED_HOSTS',
+    default='localhost,127.0.0.1',
+    cast=lambda v: [s.strip() for s in v.split(',')]
+)
+
+# ✅ Trust proxy headers (ngrok/reverse proxy) so absolute URLs use HTTPS.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 
-AUTH_USER_MODEL = 'accounts.CustomUser'
+# ✅ CSRF Trusted Origins - configured for development/ngrok
+CSRF_TRUSTED_ORIGINS = [
+    'https://overrigged-botanically-lila.ngrok-free.dev',
+    "http://172.24.0.1:3000",
+    "http://localhost:3000",
+    "https://unluckier-dorie-nontumultuous.ngrok-free.dev",
+    'https://outmatch-marvelous-mummify.ngrok-free.dev'
+]
+
+# ✅ CORS Settings - Production safe
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='',
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()]
+)
+CORS_ALLOW_CREDENTIALS = True
 
 
-
-# Application definition
+# ✅ Application definition
 
 INSTALLED_APPS = [
     'daphne',
@@ -93,6 +116,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 ASGI_APPLICATION = 'core.asgi.application'
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -102,20 +126,39 @@ CHANNEL_LAYERS = {
     },
 }
 
-# Celery settings
+# ✅ Celery settings
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://redis:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://redis:6379/1')
 CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
+CELY_TASK_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
-SHIPPING_FEE=config('SHIPPING_FEE', default=50, cast=int)
+# ✅ Core business settings
+SHIPPING_FEE = config('SHIPPING_FEE', default=50, cast=int)
 ORDER_PAYMENT_TIMEOUT_MINUTES = config('ORDER_PAYMENT_TIMEOUT_MINUTES', default=5, cast=int)
-#Marchent settings
+# Merchant settings
 STORE_ID = config('STORE_ID')
 STORE_PASSWORD = config('STORE_PASSWORD')
 
-# Celery Beat settings for periodic tasks
+# ✅ SSLCommerz URLs configurable — never hardcode sandbox in production.
+SSLCOMMERZ_API_URL = config(
+    'SSLCOMMERZ_API_URL',
+    default='https://sandbox.sslcommerz.com/gwprocess/v4/api.php',
+)
+SSLCOMMERZ_VALIDATION_URL = config(
+    'SSLCOMMERZ_VALIDATION_URL',
+    default='https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php',
+)
+
+# ✅ bKash Payment Gateway (PGW) settings
+BKASH_APP_KEY = config('BKASH_APP_KEY', default='')
+BKASH_APP_SECRET = config('BKASH_APP_SECRET', default='')
+BKASH_BASE_URL = config(
+    'BKASH_BASE_URL',
+    default='https://sandbox.pay.bka.sh/v1.2.0-beta',
+)
+
+# ✅ Celery Beat settings for periodic tasks
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
     'cancel-expired-pending-orders': {
@@ -126,11 +169,10 @@ CELERY_BEAT_SCHEDULE = {
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Dhaka'
 
-
-#commission percentage
+# ✅ Commission percentage
 COMMISSION_PERCENTAGE = config('commission_percentage', default=0.10, cast=Decimal)
-#JWT setting
 
+# ✅ JWT settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=5),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -139,17 +181,26 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+# ✅ REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
-     'DEFAULT_FILTER_BACKENDS': (
+    'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
-        
     ),
-    
+    # Global throttling to mitigate brute-force / credential-stuffing.
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/minute',
+        'user': '120/minute',
+    },
 }
-# Database
+
+# ✅ Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 import dj_database_url
@@ -163,7 +214,7 @@ DATABASES = {
 }
 
 
-# Password validation
+# ✅ Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -182,7 +233,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-# Internationalization
+# ✅ Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
@@ -194,7 +245,7 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
+# ✅ Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
@@ -202,25 +253,52 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# CORS Settings
-CORS_ALLOW_ALL_ORIGINS = True  # For development. Change for production.
-CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = [
-    'https://overrigged-botanically-lila.ngrok-free.dev',
-    "http://172.24.0.1:3000",
-    "http://localhost:3000",
-    "https://unluckier-dorie-nontumultuous.ngrok-free.dev",
-    'https://outmatch-marvelous-mummify.ngrok-free.dev'
-]
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-    'ngrok-skip-browser-warning',
-]
+
+# ✅ Cloudflare Services - import configuration module
+# All Cloudflare service settings are centralized in core.cloudflare
+# This allows easy management and switching between services
+try:
+    from core.cloudflare import r2, is_r2_configured, get_service_status, R2
+except ImportError:
+    # Fallback if cloudflare module not available (e.g., minimal deployment)
+    r2 = None
+    is_r2_configured = lambda: False
+    get_service_status = lambda: {}
+    R2 = None
+
+# ✅ R2 Configuration - derived from cloudflare module
+# These are exposed for Django storage backends and template usage
+CLOUDFLARE_R2_ACCOUNT_ID = os.getenv('CLOUDFLARE_R2_ACCOUNT_ID', '104dbc5609bc33780236c732ecf740dd')
+CLOUDFLARE_R2_ACCESS_KEY_ID = os.getenv('CLOUDFLARE_R2_ACCESS_KEY_ID', '')
+CLOUDFLARE_R2_SECRET_ACCESS_KEY = os.getenv('CLOUDFLARE_R2_SECRET_ACCESS_KEY', '')
+CLOUDFLARE_R2_BUCKET_NAME = os.getenv('CLOUDFLARE_R2_BUCKET_NAME', 'townmarket')
+
+# ✅ Storage backends - use R2 for both media and static files
+# These strings are required by Django's settings system
+DEFAULT_FILE_STORAGE = 'storages.backends.cloudflare.CloudFileStorage'
+STATICFILES_STORAGE = 'storages.backends.cloudflare.StaticCloudFileStorage'
+
+# ✅ R2 endpoint is auto-derived from account ID:
+# Format: https://<account-id>.r2.cloudflarestorage.com
+# No manual endpoint configuration needed
+# The actual R2 instance is available via: from core.cloudflare import r2
+
+# ✅ Optional: Custom domain (e.g., files.yourdomain.com)
+# Set CLOUDFLARE_R2_CUSTOM_DOMAIN env var to use custom CNAME
+CLOUDFLARE_R2_CUSTOM_DOMAIN = os.getenv('CLOUDFLARE_R2_CUSTOM_DOMAIN', default='')
+
+# ✅ File management settings
+AWS_S3_FILE_OVERWRITE = False  # Prevent overwriting existing files on re-upload
+DEFAULT_FILE_ACL = 'public-read'  # Allow public access to uploaded files
+FILE_POST_DELETE = True  # Delete files from R2 when Django model deleted
+
+# ✅ Cache control for uploaded files
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': 'max-age=86400',
+    'ServerSideEncryption': 'AES256',
+}
+
+
+# ✅ OAuth / Social Auth settings (placeholder for future)
+# GOOGLE_OAUTH2_CLIENT_ID = config('GOOGLE_OAUTH2_CLIENT_ID', default='')
+# GOOGLE_OAUTH2_CLIENT_SECRET = config('GOOGLE_OAUTH2_CLIENT_SECRET', default='')

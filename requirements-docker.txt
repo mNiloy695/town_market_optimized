@@ -25,3 +25,9 @@ pytz==2024.1
 sqlparse==0.5.0
 six==1.16.0
 django-cors-headers==4.7.0
+
+# Cloudflare R2 Storage
+django-storages==1.14.6
+
+# WSGI server for production (used by docker-compose.prod.yml)
+gunicorn==22.0.0
