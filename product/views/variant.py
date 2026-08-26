@@ -3,13 +3,24 @@ from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-from django.db.models import F
+from django.db.models import F, Q
 from product.models import Product, ProductVariant
+
+
+def get_active_product_or_404(pk):
+    return get_object_or_404(
+        Product,
+        pk=pk,
+        is_active=True,
+        shop__is_active=True,
+        shop__is_deactivated=False,
+        shop__status='approved',
+    )
 
 
 class ProductAvailableOptionsView(APIView):
     def post(self, request, pk):
-        product = get_object_or_404(Product, pk=pk)
+        product = get_active_product_or_404(pk)
 
         selected_option_value_ids = request.data.get('selected_option_value_ids', [])
 
@@ -46,7 +57,7 @@ class ProductAvailableOptionsView(APIView):
         return Response(result)
 
     def get(self, request, pk):
-        product = get_object_or_404(Product, pk=pk)
+        product = get_active_product_or_404(pk)
 
         selected_option_value_ids = request.query_params.get('selected_option_value_ids', '')
         if isinstance(selected_option_value_ids, str):
@@ -84,7 +95,7 @@ class ProductAvailableOptionsView(APIView):
 
 class FindVariantView(APIView):
     def post(self, request, pk):
-        product = get_object_or_404(Product, pk=pk)
+        product = get_active_product_or_404(pk)
 
         option_value_ids = request.data.get('option_value_ids', [])
 
@@ -118,7 +129,7 @@ class FindVariantView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
     def get(self, request, pk):
-        product = get_object_or_404(Product, pk=pk)
+        product = get_active_product_or_404(pk)
 
         option_value_ids = request.query_params.get('option_value_ids', '')
         if isinstance(option_value_ids, str):
@@ -157,6 +168,7 @@ class RestockView(APIView):
     def post(self, request, variant_id):
         from product.serializers import RestockSerializer
         from product.models import ProductVariant
+        from shop.checks import get_vendor_shop
 
         serializer = RestockSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -166,6 +178,11 @@ class RestockView(APIView):
             variant = ProductVariant.objects.select_related('product__shop').get(id=variant_id)
         except ProductVariant.DoesNotExist:
             return Response({"error": "Variant not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            shop = get_vendor_shop(request.user)
+        except Exception as e:
+            return Response({"error": str(e.detail.get("detail", str(e)))}, status=status.HTTP_403_FORBIDDEN)
 
         if variant.product.shop.owner != request.user:
             return Response({"error": "You do not own this product's shop"}, status=status.HTTP_403_FORBIDDEN)

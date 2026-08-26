@@ -35,8 +35,12 @@ class ReviewViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        # Allow filtering by product_id
-        queryset = Review.objects.all()
+        queryset = Review.objects.filter(
+            product__is_active=True,
+            product__shop__is_active=True,
+            product__shop__is_deactivated=False,
+            product__shop__status='approved',
+        )
         product_id = self.request.query_params.get('product_id')
         if product_id:
             queryset = queryset.filter(product_id=product_id)

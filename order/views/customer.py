@@ -14,6 +14,11 @@ class OrderListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        if not request.user.is_active:
+            return Response(
+                {'error': 'Your account has been deactivated'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         from rest_framework.pagination import PageNumberPagination
 
         class StandardPagination(PageNumberPagination):
@@ -42,6 +47,11 @@ class OrderDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, order_id):
+        if not request.user.is_active:
+            return Response(
+                {'error': 'Your account has been deactivated'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         order = get_object_or_404(Order, id=order_id, user=request.user)
         serializer = OrderDetailSerializer(order, context={'request': request})
         return Response(serializer.data)
@@ -51,6 +61,11 @@ class CustomerOrderCancel(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, order_id):
+        if not request.user.is_active:
+            return Response(
+                {'error': 'Your account has been deactivated'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         try:
             order = Order.objects.get(id=order_id, user=request.user)
         except Order.DoesNotExist:
@@ -77,6 +92,11 @@ class PayNowView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, order_id):
+        if not request.user.is_active:
+            return Response(
+                {'error': 'Your account has been deactivated'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         order = get_object_or_404(Order, id=order_id, user=request.user)
 
         if order.status != 'pending_payment' or order.is_paid:
@@ -107,44 +127,7 @@ class PaymentConfirmationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, order_id):
-        try:
-            order = Order.objects.get(id=order_id, user=request.user)
-        except Order.DoesNotExist:
-            return Response(
-                {'error': 'Order not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        if order.status != 'pending_payment':
-            return Response(
-                {'error': f'Order is already {order.status}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if order.is_paid:
-            return Response(
-                {'error': 'Payment already confirmed'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            from django.db import transaction
-            with transaction.atomic():
-                order.confirm_payment()
-
-                return Response(
-                    {
-                        'message': 'Payment confirmed successfully',
-                        'order': OrderDetailSerializer(order, context={'request': request}).data,
-                        'next_step': 'Vendors are processing your order',
-                        'status': 'confirmed'
-                    },
-                    status=status.HTTP_200_OK
-                )
-
-        except Exception as e:
-            logger.exception("Payment confirmation failed for user %s order %s", request.user.id, order_id)
-            return Response(
-                {'error': 'Payment confirmation failed due to an internal error. Please try again.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        return Response(
+            {'error': 'Payment confirmation is handled automatically by the payment gateway. Contact support if your payment was processed.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )

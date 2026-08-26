@@ -65,9 +65,14 @@ class ActiveUserAccountView(APIView):
             )
 
         user = otp.user
-        if not user.is_active:
-            user.is_active = True
-            user.save(update_fields=['is_active'])
+        if user.is_verified:
+            return Response(
+                {"error": "Account was previously deactivated by admin. Please contact support."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        user.is_active = True
+        user.is_verified = True
+        user.save(update_fields=['is_active', 'is_verified'])
 
         otp.delete()
 
@@ -96,11 +101,13 @@ class ForgotPasswordandResendView(APIView):
             phone = result.as_e164
             user = User.objects.prefetch_related("otps").get(phone=phone)
         except User.DoesNotExist:
-            return Response({"error": "Invalid user"})
+            return Response({"message": "If an account with this phone exists, an OTP has been sent."})
 
         if action == "reset":
             existing_otp = user.otps.filter(type="reset").first()
         elif action == "active":
+            if user.is_active and user.is_verified:
+                return Response({"message": "If an account with this phone exists, an OTP has been sent."})
             existing_otp = user.otps.filter(type="active").first()
         else:
             existing_otp = None
@@ -226,12 +233,8 @@ class ResetPasswordView(APIView):
             otp.record_failed_attempt()
             return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if user.is_active == False:
-            user.is_active = True
-            user.save()
-
         user.set_password(password)
-        user.save()
+        user.save(update_fields=['password'])
         otp.delete()
 
         return Response({
@@ -243,6 +246,11 @@ class ChangePasswordView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        if not request.user.is_active:
+            return Response(
+                {"error": "Your account has been deactivated"},
+                status=status.HTTP_403_FORBIDDEN
+            )
         from accounts.serializers import ChangingPassword
         serializer = ChangingPassword(data=request.data, context={'request': request})
         if serializer.is_valid():

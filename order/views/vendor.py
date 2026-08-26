@@ -22,11 +22,12 @@ class VendorOrderListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        from shop.checks import get_vendor_shop
         try:
-            shop = request.user.shop
-        except Exception:
+            shop = get_vendor_shop(request.user)
+        except Exception as e:
             return Response(
-                {'error': 'User does not own a shop'},
+                {'error': str(e.detail.get("detail", str(e)))},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -58,11 +59,12 @@ class VendorOrderDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, shop_order_id):
+        from shop.checks import get_vendor_shop
         try:
-            shop = request.user.shop
-        except Exception:
+            shop = get_vendor_shop(request.user)
+        except Exception as e:
             return Response(
-                {'error': 'User does not own a shop'},
+                {'error': str(e.detail.get("detail", str(e)))},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -75,11 +77,12 @@ class VendorOrderStatusUpdateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, shop_order_id):
+        from shop.checks import get_vendor_shop
         try:
-            shop = request.user.shop
-        except Exception:
+            shop = get_vendor_shop(request.user)
+        except Exception as e:
             return Response(
-                {'error': 'User does not own a shop'},
+                {'error': str(e.detail.get("detail", str(e)))},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -134,14 +137,15 @@ class VendorDashboardStatsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        from shop.checks import get_vendor_shop
         year = request.query_params.get('year', timezone.now().year)
         month = request.query_params.get('month', None)
         day = request.query_params.get('day', None)
         try:
-            shop = request.user.shop
-        except Exception:
+            shop = get_vendor_shop(request.user)
+        except Exception as e:
             return Response(
-                {'error': 'User does not own a shop'},
+                {'error': str(e.detail.get("detail", str(e)))},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -181,6 +185,11 @@ class OrderReturnRequestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, shop_order_id):
+        if not request.user.is_active:
+            return Response(
+                {'error': 'Your account has been deactivated'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         try:
             order = Order.objects.get(
                 id__in=ShopOrder.objects.filter(id=shop_order_id).values('order_id'),
@@ -234,11 +243,12 @@ class VendorReturnApprovalView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, shop_order_id):
+        from shop.checks import get_vendor_shop
         try:
-            shop = request.user.shop
-        except Exception:
+            shop = get_vendor_shop(request.user)
+        except Exception as e:
             return Response(
-                {'error': 'User does not own a shop'},
+                {'error': str(e.detail.get("detail", str(e)))},
                 status=status.HTTP_403_FORBIDDEN
             )
 

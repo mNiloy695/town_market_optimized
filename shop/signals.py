@@ -1,7 +1,7 @@
 import logging
-from django.db.models.signals import pre_save
+from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
-from .models import Shop
+from .models import Shop, RequestForShop
 from product.models import Product
 
 logger = logging.getLogger(__name__)
@@ -35,8 +35,46 @@ def deactivate_shop_products(sender, instance, **kwargs):
                 "Deactivated products for shop %s (is_active=%s, is_deactivated=%s)",
                 instance.pk, instance.is_active, instance.is_deactivated,
             )
-    else:
         # New shop creation - if marked deactivated from the start, deactivate products
         if instance.is_deactivated:
             Product.objects.none()  # No products yet, nothing to do
             # We'll handle this via post_save if needed
+
+
+@receiver(post_save, sender=RequestForShop)
+def update_user_status_on_request(sender, instance, **kwargs):
+    user = instance.user
+    shop = instance.shop
+    if instance.status == 'approved':
+        user.is_request_for_shop = 'request_approved'
+        user.role = 'seller'
+        shop.status = 'approved'
+        shop.is_active = True
+        shop.is_deactivated = False
+        shop.save(update_fields=['status', 'is_active', 'is_deactivated'])
+    elif instance.status == 'pending':
+        user.is_request_for_shop = 'request_pending'
+        shop.status = 'pending'
+        shop.save(update_fields=['status'])
+    else:  # rejected
+        user.is_request_for_shop = 'request_not_requested'
+        user.role = 'buyer'
+        shop.status = 'rejected'
+        shop.is_active = False
+        shop.is_deactivated = True
+        shop.save(update_fields=['status', 'is_active', 'is_deactivated'])
+    user.save(update_fields=['is_request_for_shop', 'role'])
+
+
+@receiver(post_save, sender=Shop)
+def update_user_status_on_shop(sender, instance, **kwargs):
+    user = instance.owner
+    if instance.status == 'approved':
+        user.is_request_for_shop = 'request_approved'
+        user.role = 'seller'
+    elif instance.status == 'pending':
+        user.is_request_for_shop = 'request_pending'
+    else:  # rejected
+        user.is_request_for_shop = 'request_not_requested'
+        user.role = 'buyer'
+    user.save(update_fields=['is_request_for_shop', 'role'])

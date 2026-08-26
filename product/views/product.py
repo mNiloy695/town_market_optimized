@@ -26,12 +26,25 @@ class CustomProductManagePermission(permissions.BasePermission):
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return request.user.is_authenticated
+        if not request.user.is_authenticated:
+            return False
+        if not request.user.is_active:
+            return False
+        return True
 
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return obj.shop.owner == request.user or request.user.is_staff
+        if request.user.is_staff:
+            return True
+        shop = obj.shop
+        return (
+            shop.owner == request.user
+            and request.user.is_active
+            and shop.is_active
+            and not shop.is_deactivated
+            and shop.status == 'approved'
+        )
 
 
 class ProductListView(ModelViewSet):
@@ -61,18 +74,27 @@ class ProductListView(ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.role == 'seller':
-            shop = Shop.objects.filter(owner=user).first()
-
-            if not shop:
-                raise serializers.ValidationError({"detail": "You do not have a shop registered."})
-
-            if shop.status != 'approved':
-                raise serializers.ValidationError({"detail": f"Your shop is currently {shop.status}. It must be approved before you can create products."})
-
-            serializer.save(shop=shop)
-        else:
+        if user.role != 'seller':
             raise serializers.ValidationError({"detail": "Only users with the 'seller' role can create products."})
+
+        if not user.is_active:
+            raise serializers.ValidationError({"detail": "Your account has been deactivated."})
+
+        shop = Shop.objects.filter(owner=user).first()
+
+        if not shop:
+            raise serializers.ValidationError({"detail": "You do not have a shop registered."})
+
+        if shop.status != 'approved':
+            raise serializers.ValidationError({"detail": f"Your shop is currently {shop.status}. It must be approved before you can create products."})
+
+        if not shop.is_active:
+            raise serializers.ValidationError({"detail": "Your shop has been deactivated. Please contact support."})
+
+        if shop.is_deactivated:
+            raise serializers.ValidationError({"detail": "Your shop has been deactivated. Please contact support."})
+
+        serializer.save(shop=shop)
 
     from rest_framework.decorators import action
 
@@ -102,8 +124,9 @@ class MyShopProductView(generics.ListAPIView):
     search_fields = ['name', 'sub_category__slug', 'shop__slug', 'sub_category__parent__slug', 'slug']
 
     def get_queryset(self):
-        user = self.request.user
-        shop = Shop.objects.filter(owner=user).first()
-        if not shop:
+        from shop.checks import get_vendor_shop
+        try:
+            shop = get_vendor_shop(self.request.user)
+        except Exception:
             return Product.objects.none()
         return Product.objects.filter(shop=shop)

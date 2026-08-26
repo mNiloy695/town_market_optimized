@@ -19,6 +19,12 @@ def refresh_token_view(request):
 
         user = User.objects.get(pk=user_id)
 
+        if not user.is_active:
+            return Response(
+                {"error": "Your account has been deactivated"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         old_token.blacklist()
 
         new_refresh = RefreshToken.for_user(user)

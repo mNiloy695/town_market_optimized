@@ -13,6 +13,11 @@ class AddToCartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if not request.user.is_active:
+            return Response(
+                {'error': 'Your account has been deactivated'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         serializer = AddToCartSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         variant = serializer.variant
@@ -71,6 +76,11 @@ class IncrementOrDecrementCartItemView(APIView):
     permission_classes=[IsAuthenticated]
     def patch(self,request,variant_id):
         from django.db import transaction
+        if not request.user.is_active:
+            return Response(
+                {'error': 'Your account has been deactivated'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         quantity=request.data.get('quantity', 1)
         if not isinstance(quantity, int) or quantity <= 0:
             return Response({'error': 'Quantity must be a positive integer.'}, status=status.HTTP_400_BAD_REQUEST)

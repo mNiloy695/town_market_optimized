@@ -11,11 +11,35 @@ class CategorySerializer(serializers.ModelSerializer):
 class ShopSerializer(serializers.ModelSerializer):
     market_data = serializers.SerializerMethodField(read_only=True)
     category_data = CategorySerializer(source='Category', many=True, read_only=True)
+    latitude = serializers.DecimalField(max_digits=20, decimal_places=15, required=False, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=20, decimal_places=15, required=False, allow_null=True)
 
     class Meta:
         model = Shop
         fields = '__all__'
-        read_only_fields = ('owner', 'created_at', 'updated_at', 'status', 'category_data', 'market_data')
+        read_only_fields = ('owner', 'created_at', 'updated_at', 'category_data', 'market_data')
+
+    def validate_latitude(self, value):
+        if value is not None:
+            return round(value, 6)
+        return value
+
+    def validate_longitude(self, value):
+        if value is not None:
+            return round(value, 6)
+        return value
+
+    def validate(self, data):
+        request = self.context.get('request')
+        if request and request.method in ['PATCH', 'PUT']:
+            user = request.user
+            if not user.is_staff:
+                for field in ('status', 'is_active', 'is_deactivated'):
+                    if field in data:
+                        raise serializers.ValidationError(
+                            {field: "Only admin can modify this field."}
+                        )
+        return data
 
     def validate_market(self, value):
         request = self.context.get('request')

@@ -1,5 +1,10 @@
 from django.urls import path,include
-from .views import RegistrationView,LoginView,LogoutView,ActiveUserAccountView,ForgotPasswordandResendView,ResetPasswordView,VerifyOTPView,user_profile_view,refresh_token_view
+from .views import (
+    RegistrationView, LoginView, LogoutView, ActiveUserAccountView,
+    ForgotPasswordandResendView, ResetPasswordView, VerifyOTPView,
+    user_profile_view, refresh_token_view, admin_users_list_view,
+    admin_user_detail_view
+)
 from rest_framework.routers import DefaultRouter
 from .views import ChangePasswordView
 
@@ -19,6 +24,8 @@ urlpatterns = [
     path("auth/password-change/",ChangePasswordView.as_view(),name='password-change'),
     path('auth/profile/',user_profile_view,name='profile'),
     path("auth/token/refresh/",refresh_token_view, name='token_refresh'),
+    path('admin/users/', admin_users_list_view, name='admin-users-list'),
+    path('admin/users/<int:pk>/', admin_user_detail_view, name='admin-user-detail'),
 ]
 
 

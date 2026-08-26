@@ -5,6 +5,8 @@ from .shop import CategorySerializer
 
 class ShopWriteSerializer(serializers.ModelSerializer):
     category_data = CategorySerializer(source='Category', many=True, read_only=True)
+    latitude = serializers.DecimalField(max_digits=20, decimal_places=15, required=False, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=20, decimal_places=15, required=False, allow_null=True)
 
     class Meta:
         model = Shop
@@ -12,6 +14,16 @@ class ShopWriteSerializer(serializers.ModelSerializer):
                   'market', 'Category', 'opening_time', 'closing_time',
                   'longitude', 'latitude', 'category_data']
         read_only_fields = ['category_data']
+
+    def validate_latitude(self, value):
+        if value is not None:
+            return round(value, 6)
+        return value
+
+    def validate_longitude(self, value):
+        if value is not None:
+            return round(value, 6)
+        return value
 
 
 class RequestForShopSerializer(serializers.ModelSerializer):
@@ -21,14 +33,18 @@ class RequestForShopSerializer(serializers.ModelSerializer):
     class Meta:
         model = RequestForShop
         fields = ['id', 'user', 'shop', 'created_at', 'updated_at', 'status', 'shop_data']
-        read_only_fields = ('user', 'shop', 'created_at', 'updated_at', 'status')
+        read_only_fields = ('user', 'shop', 'created_at', 'updated_at')
 
     def get_shop(self, obj):
         from .shop import ShopSerializer
         return ShopSerializer(obj.shop).data
 
     def validate(self, attrs):
+        if self.instance is not None:
+            return attrs
         user = self.context['request'].user
+        if not user.is_active:
+            raise serializers.ValidationError({"error": "Your account has been deactivated."})
         if Shop.objects.filter(owner=user).exists():
             shop = Shop.objects.get(owner=user)
             raise serializers.ValidationError({

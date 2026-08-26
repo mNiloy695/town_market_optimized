@@ -1,18 +1,18 @@
 from .category import (
-    ParentProductCategoryListView,
-    ProductCategoryListView,
-    ProductCategoryOptionListView,
-    ProductCategoryOptionValueListView,
+    ParentProductCategoryViewSet,
+    ProductCategoryViewSet,
+    ProductCategoryOptionViewSet,
+    ProductCategoryOptionValueViewSet,
 )
 from .product import ProductListView, MyShopProductView
 from .variant import ProductAvailableOptionsView, FindVariantView, RestockView
 from .image import ProductImageView, ProductImageDeleteView
 
 __all__ = [
-    'ParentProductCategoryListView',
-    'ProductCategoryListView',
-    'ProductCategoryOptionListView',
-    'ProductCategoryOptionValueListView',
+    'ParentProductCategoryViewSet',
+    'ProductCategoryViewSet',
+    'ProductCategoryOptionViewSet',
+    'ProductCategoryOptionValueViewSet',
     'ProductListView',
     'MyShopProductView',
     'ProductAvailableOptionsView',

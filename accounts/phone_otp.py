@@ -9,7 +9,7 @@ SMS_API_URL = "https://sms.corp.com.bd/api.php"
 def otp_send(phone, otp_code, main_message):
     try:
         message = f"Here your one time OTP {otp_code} for {main_message}. Don't share it to anyone! It will expire within 3 min"
-        numbers = phone
+        numbers = phone.lstrip("+")
         
         params = {
             "api_key": settings.SMS_API_KEY,
@@ -27,7 +27,7 @@ def otp_send(phone, otp_code, main_message):
     
     except Exception as e:
         logger.error("Error sending OTP: %s", e)
-        return f"A error occurred during sending otp: {e}" 
+        return "Failed to send OTP. Please try again later."
     
 
         

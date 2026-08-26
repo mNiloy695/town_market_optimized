@@ -21,6 +21,11 @@ class CheckoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        if not request.user.is_active:
+            return Response(
+                {'error': 'Your account has been deactivated'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         serializer = CheckoutSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
 
@@ -215,7 +220,8 @@ class CheckoutView(APIView):
             OrderItem.objects.create(
                 shop_order=shop_order,
                 product_variant=cart_item.product_variant,
-                quantity=cart_item.quantity
+                quantity=cart_item.quantity,
+                price_at_purchase=cart_item.product_variant.price
             )
 
             variant = cart_item.product_variant

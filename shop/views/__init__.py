@@ -1,9 +1,9 @@
-from .shop import ShopView
+from .shop import ShopView, CategoryView, MarketView
 from .request import RequestForShopView
-from .market import MarketView
 
 __all__ = [
     'ShopView',
     'RequestForShopView',
     'MarketView',
+    'CategoryView',
 ]

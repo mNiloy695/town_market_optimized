@@ -18,7 +18,7 @@ class IsCustomer(permissions.BasePermission):
     """
     
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated)
+        return bool(request.user and request.user.is_authenticated and request.user.is_active)
     
     def has_object_permission(self, request, view, obj):
         """Check if user owns the order"""
@@ -30,15 +30,16 @@ class IsCustomer(permissions.BasePermission):
 class IsVendor(permissions.BasePermission):
     """
     Permission for vendor-only endpoints.
-    Only users who own a shop can access.
+    Only users who own an active shop can access.
     """
     
     def has_permission(self, request, view):
-        if not (request.user and request.user.is_authenticated):
+        if not (request.user and request.user.is_authenticated and request.user.is_active):
             return False
-        
-        # Check if user has a shop
-        return hasattr(request.user, 'shop')
+        if not hasattr(request.user, 'shop'):
+            return False
+        shop = request.user.shop
+        return shop.is_active and not shop.is_deactivated and shop.status == 'approved'
 
 
 class IsVendorOfShop(permissions.BasePermission):
@@ -47,9 +48,12 @@ class IsVendorOfShop(permissions.BasePermission):
     """
     
     def has_permission(self, request, view):
-        if not (request.user and request.user.is_authenticated):
+        if not (request.user and request.user.is_authenticated and request.user.is_active):
             return False
-        return hasattr(request.user, 'shop')
+        if not hasattr(request.user, 'shop'):
+            return False
+        shop = request.user.shop
+        return shop.is_active and not shop.is_deactivated and shop.status == 'approved'
     
     def has_object_permission(self, request, view, obj):
         """Check if user owns the shop in the order"""
@@ -97,7 +101,7 @@ class CanCancelOrder(permissions.BasePermission):
 class CanUpdateOrderStatus(permissions.BasePermission):
     """
     Permission for vendors to update order status.
-    Vendor must own the shop and the transition must be valid.
+    Vendor must own an active shop and the transition must be valid.
     """
     
     message = "You cannot update this order status."
@@ -106,11 +110,16 @@ class CanUpdateOrderStatus(permissions.BasePermission):
         if not isinstance(obj, ShopOrder):
             return False
         
-        # Vendor must own the shop
-        if obj.shop.owner != request.user:
+        if not request.user.is_active:
             return False
         
-        # For now, allow all transitions (validation is in serializer)
+        shop = obj.shop
+        if shop.owner != request.user:
+            return False
+        
+        if not shop.is_active or shop.is_deactivated or shop.status != 'approved':
+            return False
+        
         return True
 
 

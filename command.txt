@@ -7,8 +7,11 @@
 # Start both backend and frontend in development mode
 bash run.sh dev
 
+sudo bash run.sh docker-dev
 # Start both backend and frontend in production mode
 bash run.sh prod
+
+sudo bash run.sh docker-prod
 
 # Start Town Market with Docker Compose (dev or prod config)
 bash run.sh docker

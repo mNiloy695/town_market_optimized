@@ -97,6 +97,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+AUTH_USER_MODEL = 'accounts.CustomUser'
+
 ROOT_URLCONF = 'core.urls'
 
 TEMPLATES = [
@@ -130,8 +132,7 @@ CHANNEL_LAYERS = {
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://redis:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://redis:6379/1')
 CELERY_ACCEPT_CONTENT = ['json']
-CELY_TASK_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_SERIALIZER = 'json'
 
 # ✅ Core business settings
 SHIPPING_FEE = config('SHIPPING_FEE', default=50, cast=int)
@@ -150,6 +151,9 @@ SSLCOMMERZ_VALIDATION_URL = config(
     default='https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php',
 )
 
+# ✅ SMS Configuration
+SMS_API_KEY = config('SMS_API_KEY', default='')
+
 # ✅ bKash Payment Gateway (PGW) settings
 BKASH_APP_KEY = config('BKASH_APP_KEY', default='')
 BKASH_APP_SECRET = config('BKASH_APP_SECRET', default='')
@@ -165,6 +169,14 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'order.tasks.cancel_expired_pending_orders',
         'schedule': crontab(minute='*/15'),  # Run every 15 minutes
     },
+    'cleanup-unverified-users': {
+        'task': 'accounts.task.cleanup_unverified_users',
+        'schedule': crontab(minute='*/10'),  # Run every 10 minutes
+    },
+    'release-expired-cart-stock': {
+        'task': 'cart.tasks.release_expired_cart_stock',
+        'schedule': crontab(minute='*/10'),  # Run every 10 minutes
+    },
 }
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Dhaka'
@@ -174,7 +186,7 @@ COMMISSION_PERCENTAGE = config('commission_percentage', default=0.10, cast=Decim
 
 # ✅ JWT settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=5),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,

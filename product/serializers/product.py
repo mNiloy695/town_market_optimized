@@ -91,8 +91,18 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if self.instance:
-            if self.instance.shop.owner != self.context['request'].user:
+            user = self.context['request'].user
+            shop = self.instance.shop
+            if shop.owner != user:
                 raise serializers.ValidationError({"detail": "You are not authorized to update this product because you are not the owner of the shop."})
+            if not user.is_active:
+                raise serializers.ValidationError({"detail": "Your account has been deactivated."})
+            if not shop.is_active:
+                raise serializers.ValidationError({"detail": "Your shop has been suspended."})
+            if shop.is_deactivated:
+                raise serializers.ValidationError({"detail": "Your shop has been deactivated."})
+            if shop.status != 'approved':
+                raise serializers.ValidationError({"detail": f"Your shop is currently {shop.status}."})
         return attrs
 
     def create(self, validated_data):

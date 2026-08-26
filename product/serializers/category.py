@@ -12,7 +12,7 @@ class ParentProductCategorySerializer(serializers.ModelSerializer):
 
 
 class ProductCategorySerializer(serializers.ModelSerializer):
-    parent = ParentProductCategorySerializer(read_only=True)
+    parent_data = ParentProductCategorySerializer(source='parent', read_only=True)
 
     class Meta:
         model = ProductCategory

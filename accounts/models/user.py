@@ -64,6 +64,7 @@ class CustomUser(AbstractUser, PermissionsMixin):
     birth_date = models.DateField(blank=True, null=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     otp_locked_until = models.DateTimeField(null=True, blank=True)
+    is_verified = models.BooleanField(default=False)
     USERNAME_FIELD = 'phone'
     username = None
     REQUIRED_FIELDS = ['country_code', 'name']
