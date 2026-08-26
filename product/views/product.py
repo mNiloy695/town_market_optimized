@@ -30,6 +30,24 @@ class CustomProductManagePermission(permissions.BasePermission):
             return False
         if not request.user.is_active:
             return False
+        
+        # Staff and superusers have unrestricted access
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+            
+        # Only sellers are allowed to perform write operations (POST, PUT, PATCH, DELETE)
+        if request.user.role != 'seller':
+            return False
+            
+        # For product creation (POST), verify the seller has an approved, active, non-deactivated shop
+        if request.method == 'POST':
+            from shop.models import Shop
+            shop = Shop.objects.filter(owner=request.user).first()
+            if not shop:
+                return False
+            if shop.status != 'approved' or not shop.is_active or shop.is_deactivated:
+                return False
+                
         return True
 
     def has_object_permission(self, request, view, obj):

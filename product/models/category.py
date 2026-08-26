@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from slugify import slugify
 
 
@@ -49,6 +50,7 @@ class ProductCategoryOption(models.Model):
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, unique=True, blank=True, null=True)
     product_category = models.ForeignKey(ProductCategory, on_delete=models.CASCADE, related_name='options')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_options')
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
@@ -70,8 +72,20 @@ class ProductCategoryOption(models.Model):
 class ProductCategoryOptionValue(models.Model):
     product_category_option = models.ForeignKey(ProductCategoryOption, on_delete=models.CASCADE, related_name='values')
     value = models.TextField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_option_values')
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     def __str__(self):
         return f"{self.product_category_option.name} - {self.value} -id {self.id}"
+
+
+class ProductCategoryOptionAudit(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='option_audits')
+    action = models.CharField(max_length=50)  # 'create_option' or 'create_value'
+    option_name = models.CharField(max_length=200)
+    value_name = models.CharField(max_length=200, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.action} - {self.option_name} - {self.value_name or ''}"

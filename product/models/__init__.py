@@ -3,6 +3,7 @@ from .category import (
     ProductCategory,
     ProductCategoryOption,
     ProductCategoryOptionValue,
+    ProductCategoryOptionAudit,
 )
 from .product import Product
 from .variant import ProductVariant, ProductVariantOptionValue
@@ -13,6 +14,7 @@ __all__ = [
     'ProductCategory',
     'ProductCategoryOption',
     'ProductCategoryOptionValue',
+    'ProductCategoryOptionAudit',
     'Product',
     'ProductVariant',
     'ProductVariantOptionValue',

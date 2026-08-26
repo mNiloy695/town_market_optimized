@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Product, ProductCategory, ProductImage, ParentProductCategory,
     ProductCategoryOption, ProductCategoryOptionValue, ProductVariant,
-    ProductVariantOptionValue
+    ProductVariantOptionValue, ProductCategoryOptionAudit
 )
 
 # Register your models here.
@@ -20,3 +20,10 @@ admin.site.register(ProductCategoryOption)
 admin.site.register(ProductCategoryOptionValue)
 admin.site.register(ProductVariant)
 admin.site.register(ProductVariantOptionValue)
+
+@admin.register(ProductCategoryOptionAudit)
+class ProductCategoryOptionAuditAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'action', 'option_name', 'value_name', 'created_at')
+    list_filter = ('action', 'created_at', 'user')
+    search_fields = ('option_name', 'value_name', 'user__username')
+    readonly_fields = ('created_at',)
