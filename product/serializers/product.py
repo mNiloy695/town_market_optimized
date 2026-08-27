@@ -28,7 +28,9 @@ class ProductSerializer(serializers.ModelSerializer):
         return {
             "shop_name": obj.shop.name,
             "shop_id": obj.shop.id,
+            "shop_owner_id": obj.shop.owner_id,
         }
+
 
     def get_sub_category_data(self, obj):
         return {

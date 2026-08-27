@@ -33,7 +33,7 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 # ✅ ALLOWED_HOSTS - Production ready, never ['*']
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
-    default='localhost,127.0.0.1',
+    default='localhost,127.0.0.1,townmarket-web-dev,townmarket_web_dev,web',
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
 
@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     'order',
     'invoice',
     'review',
+    'chat',
     'corsheaders',
 ]
 

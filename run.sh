@@ -225,8 +225,9 @@ if [ "$MODE" = "docker-dev" ]; then
     echo "========================================="
     echo ""
     print_info "Django runs directly on port 8000 (no Nginx)"
-    print_info "Live code reload via volume mount"
-    print_info "Services: Django + PostgreSQL + Redis + Celery"
+    print_info "React frontend runs on port 3000"
+    print_info "Live code reload via volume mounts"
+    print_info "Services: React + Django + PostgreSQL + Redis + Celery"
     echo ""
 
     if ! command -v docker &> /dev/null; then
@@ -263,6 +264,7 @@ if [ "$MODE" = "docker-dev" ]; then
     echo "========================================="
     echo ""
     echo "  Django API (direct):  http://localhost:8000"
+    echo "  React Frontend:       http://localhost:3000"
     echo "  PostgreSQL:           localhost:5431"
     echo "  Redis:                localhost:6380"
     echo ""

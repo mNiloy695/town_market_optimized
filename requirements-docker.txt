@@ -9,6 +9,7 @@ psycopg2-binary==2.9.9
 
 # Redis for caching and message broker
 redis==5.0.8
+channels-redis==4.2.1
 
 # Configuration
 python-decouple==3.8

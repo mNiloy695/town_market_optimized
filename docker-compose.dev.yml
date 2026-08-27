@@ -12,7 +12,7 @@ include:
 services:
   web:
     build: .
-    container_name: townmarket_web_dev
+    container_name: townmarket-web-dev
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py runserver 0.0.0.0:8000"
@@ -34,3 +34,22 @@ services:
     networks:
       - townmarket_net
     restart: "no"                           # dev: let it crash visibly
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.dev
+    container_name: townmarket_frontend_dev
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_PROXY_TARGET=http://townmarket-web-dev:8000/v1
+      - VITE_MEDIA_BASE_URL=http://localhost:8000/media
+    depends_on:
+      - web
+    networks:
+      - townmarket_net
+    restart: "no"

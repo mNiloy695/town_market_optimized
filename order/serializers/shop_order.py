@@ -30,12 +30,23 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
     shop_name = serializers.CharField(source='shop.name', read_only=True)
     item_count = serializers.SerializerMethodField()
     order_number = serializers.SerializerMethodField()
+    customer_name = serializers.CharField(source='order.user.name', read_only=True)
+    customer_phone = serializers.CharField(source='order.user.phone', read_only=True)
+    customer_email = serializers.CharField(source='order.user.email', read_only=True)
+    shipping_address = serializers.CharField(source='order.shipping_address', read_only=True)
+    city = serializers.CharField(source='order.shipping_city', read_only=True)
+    area = serializers.CharField(source='order.shipping_upazilla', read_only=True)
+    delivery_charge = serializers.CharField(source='shipping_fee', read_only=True)
+    can_be_cancelled = serializers.SerializerMethodField()
+    items = OrderItemSerializer(many=True, read_only=True)
 
     class Meta:
         model = ShopOrder
         fields = [
             'id', 'order_number', 'shop_name', 'total', 'status', 'commission_given',
-            'item_count', 'created_at'
+            'item_count', 'created_at', 'customer_name', 'customer_phone', 'customer_email',
+            'shipping_address', 'city', 'area', 'delivery_charge', 'can_be_cancelled', 'items',
+            'subtotal', 'tax', 'discount'
         ]
         read_only_fields = fields
 
@@ -44,3 +55,7 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
 
     def get_order_number(self, obj):
         return obj.get_order_number()
+
+    def get_can_be_cancelled(self, obj):
+        can_cancel, _ = obj.order.can_be_cancelled()
+        return can_cancel
