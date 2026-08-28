@@ -84,8 +84,9 @@ class MessageListView(ListAPIView):
 
     def get_queryset(self):
         conversation_id = self.kwargs.get('conversation_id')
+        after = self.request.query_params.get('after')
         try:
-            return get_conversation_messages(conversation_id, self.request.user)
+            return get_conversation_messages(conversation_id, self.request.user, after=after)
         except PermissionDenied as e:
             logger.warning(f"Unauthorized messages access attempt on conversation {conversation_id} by user {self.request.user.id}")
             raise e

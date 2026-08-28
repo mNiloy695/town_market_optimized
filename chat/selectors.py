@@ -52,15 +52,19 @@ def get_user_conversations(user):
     ).order_by('-last_message_at')
 
 
-def get_conversation_messages(conversation_id: str, user):
+def get_conversation_messages(conversation_id: str, user, after=None):
     """
     Retrieves all messages in a conversation, verifying user authorization.
-    Ordered by created_at.
+    Ordered by -created_at (newest first for pagination).
+    If 'after' is provided, only messages created after that timestamp are returned.
     """
     conversation = get_conversation_for_user(conversation_id, user)
-    return Message.objects.filter(conversation=conversation).select_related(
+    qs = Message.objects.filter(conversation=conversation).select_related(
         'sender', 'sender__profile', 'product', 'product__shop'
-    ).order_by('created_at')
+    )
+    if after:
+        qs = qs.filter(created_at__gt=after)
+    return qs.order_by('-created_at')
 
 
 def is_user_online(user_id) -> bool:
