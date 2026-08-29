@@ -1,4 +1,5 @@
 from django.db import models
+import secrets
 
 
 OTP_TYPE = (
@@ -14,19 +15,35 @@ class OTP(models.Model):
         related_name="otps",
         null=True
     )
-    code = models.CharField(max_length=4)
+    code = models.CharField(max_length=6)
     type = models.CharField(choices=OTP_TYPE, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     failed_attempts = models.IntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
+    # Repeated resend requests (after an OTP expires) also count toward lockout
+    # so a locked user cannot simply keep requesting fresh OTPs.
+    resend_attempts = models.IntegerField(default=0)
+    resend_locked_until = models.DateTimeField(null=True, blank=True)
 
     MAX_FAILED_ATTEMPTS = 5
     LOCKOUT_MINUTES = 15
+    CODE_LENGTH = 6
+
+    @classmethod
+    def generate_code(cls):
+        """Cryptographically-random, zero-padded N-digit code (no randint)."""
+        return f"{secrets.randbelow(10 ** cls.CODE_LENGTH):0{cls.CODE_LENGTH}d}"
 
     def is_expired(self):
         from django.utils import timezone
         expiration_time = self.created_at + timezone.timedelta(minutes=3)
         return timezone.now() > expiration_time
+
+    def is_resend_locked(self):
+        from django.utils import timezone
+        if self.resend_locked_until and timezone.now() < self.resend_locked_until:
+            return True
+        return False
 
     def is_locked(self):
         from django.utils import timezone
@@ -36,6 +53,12 @@ class OTP(models.Model):
             return True
         return False
 
+    def matches(self, code):
+        """Constant-time comparison — never compare OTPs with plain ==."""
+        if not code:
+            return False
+        return secrets.compare_digest(str(self.code), str(code))
+
     def record_failed_attempt(self):
         from django.utils import timezone
         self.failed_attempts += 1
@@ -44,6 +67,16 @@ class OTP(models.Model):
             self.user.save(update_fields=['otp_locked_until'])
             self.locked_until = self.user.otp_locked_until
         self.save(update_fields=['failed_attempts', 'locked_until'])
+
+    def record_resend(self):
+        """Count a resend; locks the phone (user + OTP) after the threshold."""
+        from django.utils import timezone
+        self.resend_attempts += 1
+        if self.user and self.resend_attempts >= self.MAX_FAILED_ATTEMPTS:
+            self.user.otp_locked_until = timezone.now() + timezone.timedelta(minutes=self.LOCKOUT_MINUTES)
+            self.user.save(update_fields=['otp_locked_until'])
+            self.resend_locked_until = self.user.otp_locked_until
+        self.save(update_fields=['resend_attempts', 'resend_locked_until'])
 
     def reset_failed_attempts(self):
         self.failed_attempts = 0

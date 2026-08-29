@@ -140,7 +140,7 @@ class IpnViewWebhookSSLCommerze(APIView):
                         )
                     if not order.is_paid:
                         order.confirm_payment()
-                    serializer = OrderSerializer(order)
+                    serializer = OrderSerializer(order, context={'request': self.request})
                     return Response(serializer.data, status=http_status.HTTP_200_OK)
 
                 else:
@@ -164,7 +164,7 @@ class IpnViewWebhookSSLCommerze(APIView):
         """Handle gateway-verified VALID status."""
         real_amount = self._to_decimal(validation.get('amount', 0))
         real_currency = validation.get('currency', '')
-        expected_amount = order.total_amount
+        expected_amount = order.shipping_fee
         expected_currency = 'BDT'
 
         if real_amount != expected_amount or real_currency != expected_currency:
@@ -230,7 +230,7 @@ class IpnViewWebhookSSLCommerze(APIView):
             invoice.val_id = val_id
             invoice.save()
 
-        serializer = OrderSerializer(order)
+        serializer = OrderSerializer(order, context={'request': self.request})
         return Response(serializer.data, status=http_status.HTTP_200_OK)
 
     def _handle_failure(self, order, invoice, verified_status, val_id):
@@ -247,7 +247,7 @@ class IpnViewWebhookSSLCommerze(APIView):
             invoice.is_paid = False
             invoice.val_id = val_id
             invoice.save()
-        serializer = OrderSerializer(order)
+        serializer = OrderSerializer(order, context={'request': self.request})
         return Response(serializer.data, status=http_status.HTTP_200_OK)
 
     def _to_decimal(self, value, default='0'):

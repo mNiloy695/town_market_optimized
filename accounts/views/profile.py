@@ -31,7 +31,6 @@ def user_profile_view(request):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 class AdminUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
@@ -50,12 +49,27 @@ class AdminUserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "date_joined"]
 
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if request and request.method in ['PUT', 'PATCH']:
+            if not request.user.is_superuser:
+                # Sensitive fields that cannot be modified by staff
+                sensitive_fields = ["role", "is_staff", "is_superuser", "is_active", "email", "phone"]
+                for field in sensitive_fields:
+                    if field in attrs:
+                        if self.instance and getattr(self.instance, field) != attrs[field]:
+                            raise serializers.ValidationError({field: f"Only superusers can modify the '{field}' field."})
+                # Check if trying to modify a superuser
+                if self.instance and self.instance.is_superuser:
+                    raise serializers.ValidationError("Only superusers can modify superuser accounts.")
+        return attrs
+
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated, permissions.IsAdminUser])
 def admin_users_list_view(request):
     users = CustomUser.objects.all().order_by('-date_joined')
-    serializer = AdminUserSerializer(users, many=True)
+    serializer = AdminUserSerializer(users, many=True, context={'request': request})
     return Response(serializer.data)
 
 
@@ -68,11 +82,16 @@ def admin_user_detail_view(request, pk):
         return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'GET':
-        serializer = AdminUserSerializer(user)
+        serializer = AdminUserSerializer(user, context={'request': request})
         return Response(serializer.data)
 
     elif request.method == 'PATCH':
-        serializer = AdminUserSerializer(user, data=request.data, partial=True)
+        if not request.user.is_superuser:
+            return Response(
+                {"detail": "Only superusers can modify user accounts."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        serializer = AdminUserSerializer(user, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)

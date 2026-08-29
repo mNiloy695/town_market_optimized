@@ -16,6 +16,8 @@ def cleanup_unverified_users():
     expiry_time = timezone.now() - timezone.timedelta(minutes=15)
     unverified_users = CustomUser.objects.filter(
         is_verified=False,
+        is_staff=False,
+        is_superuser=False,
         date_joined__lt=expiry_time
     )
     deleted_count, deleted_details = unverified_users.delete()

@@ -93,7 +93,13 @@ class CheckoutView(APIView):
                 total_order_amount = sum(so.total for so in shop_orders)
 
                 order.total_amount = total_order_amount
-                order.save(update_fields=['total_amount'])
+                order.shipping_fee = total_shipping_fee
+                order.cod_amount = total_order_amount - total_shipping_fee
+                order.save(update_fields=['total_amount', 'shipping_fee', 'cod_amount'])
+
+                # Sync the Invoice amount with the updated total_amount
+                from invoice.models import Invoice
+                Invoice.objects.filter(order=order).update(amount=total_order_amount)
 
                 payment_method = serializer.validated_data['payment_method']
 
@@ -158,7 +164,7 @@ class CheckoutView(APIView):
         cancel_url = base_url + reverse('order:bkash-cancel', kwargs={'payment_id': 'PLACEHOLDER'})
 
         payer_ref = order.phone_number or str(request.user.id)
-        amount = order.total_amount
+        amount = order.shipping_fee
 
         result = bkash.create_payment(
             payer_reference=payer_ref,
@@ -168,6 +174,8 @@ class CheckoutView(APIView):
 
         if result.get('success'):
             payment_id = result['payment_id']
+            from invoice.models import Invoice
+            Invoice.objects.filter(order=order).update(val_id=payment_id)
             # Replace PLACEHOLDER with actual payment_id in callback URLs
             success_url = success_url.replace('PLACEHOLDER', payment_id)
             fail_url = fail_url.replace('PLACEHOLDER', payment_id)
@@ -199,11 +207,15 @@ class CheckoutView(APIView):
             item.product_variant.price * item.quantity
             for item in cart_items
         )
-        shipping_fee = SHIPPING_FEE
+        shipping_fee = max(getattr(item.product_variant.product, 'shipping_fee', 50.00) or 50.00 for item in cart_items)
         tax = 0
         discount = 0
 
         total = subtotal + tax + shipping_fee - discount
+
+        from decimal import Decimal
+        from django.conf import settings
+        comm_pct = getattr(settings, 'COMMISSION_PERCENTAGE', Decimal('0.10'))
 
         shop_order = ShopOrder.objects.create(
             order=order,
@@ -213,7 +225,8 @@ class CheckoutView(APIView):
             shipping_fee=shipping_fee,
             discount=discount,
             total=total,
-            status='pending'
+            status='pending',
+            commission_percentage=comm_pct
         )
 
         for cart_item in cart_items:

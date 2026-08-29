@@ -4,19 +4,22 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
-from datetime import timedelta
-from random import randint
 
 from accounts.models import OTP
 from accounts.validate_number import validated_phone_number
 from accounts.task import phone_otp_send
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
 User = get_user_model()
+
+GENERIC_OTP_MESSAGE = "If an account with this phone exists, an OTP has been sent."
 
 
 class ActiveUserAccountView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'otp'
 
     def post(self, request):
         phone = request.data.get("phone", None)
@@ -57,7 +60,7 @@ class ActiveUserAccountView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if otp.code != code:
+        if not otp.matches(code):
             otp.record_failed_attempt()
             return Response(
                 {"error": "OTP is invalid"},
@@ -80,7 +83,16 @@ class ActiveUserAccountView(APIView):
 
 
 class ForgotPasswordandResendView(APIView):
+    """
+    Requests an OTP (action=reset) or resends an account-activation OTP.
+
+    Anti-enumeration: every outcome (unknown phone, active-lock, resend
+    cooldown) returns the same generic message. Resends after expiry are
+    counted and lock the phone after too many attempts, so resetting an OTP
+    cannot bypass the brute-force lockout.
+    """
     permission_classes = [AllowAny]
+    throttle_scope = 'otp'
 
     def post(self, request):
         phone = request.data.get("phone", None)
@@ -97,51 +109,49 @@ class ForgotPasswordandResendView(APIView):
         if isinstance(result, dict) and "error" in result:
             return Response(result, status=400)
 
+        phone = result.as_e164
+
         try:
-            phone = result.as_e164
             user = User.objects.prefetch_related("otps").get(phone=phone)
         except User.DoesNotExist:
-            return Response({"message": "If an account with this phone exists, an OTP has been sent."})
+            return Response({"message": GENERIC_OTP_MESSAGE})
+
+        # Phone-level lockout cannot be bypassed by requesting a new OTP.
+        if user.otp_locked_until and timezone.now() < user.otp_locked_until:
+            return Response({"message": GENERIC_OTP_MESSAGE})
 
         if action == "reset":
             existing_otp = user.otps.filter(type="reset").first()
         elif action == "active":
             if user.is_active and user.is_verified:
-                return Response({"message": "If an account with this phone exists, an OTP has been sent."})
+                return Response({"message": GENERIC_OTP_MESSAGE})
             existing_otp = user.otps.filter(type="active").first()
         else:
             existing_otp = None
 
-        if existing_otp and not existing_otp.is_expired():
-            return Response({"message": "you can resend request for otp after 3 min"}, status=status.HTTP_400_BAD_REQUEST)
-
-        code = randint(1000, 9999)
-
-        if action == "reset":
-            OTP.objects.create(
-                user=user,
-                code=code,
-                type="reset"
+        # Fresh / expired OTP: issue a new one.
+        if existing_otp is None or existing_otp.is_expired():
+            if existing_otp is not None:
+                existing_otp.record_resend()
+                if existing_otp.is_resend_locked() or existing_otp.is_locked():
+                    return Response({"message": GENERIC_OTP_MESSAGE})
+            code = OTP.generate_code()
+            OTP.objects.create(user=user, code=code, type=action)
+            message = (
+                "reset password of Town Market"
+                if action == "reset"
+                else "active Town Market"
             )
-            phone_otp_send.delay(phone=phone, otp=code, main_message="reset password of Town Market")
+            phone_otp_send.delay(phone=phone, otp=code, main_message=message)
+            return Response({"message": GENERIC_OTP_MESSAGE})
 
-        elif action == "active":
-            OTP.objects.create(
-                user=user,
-                code=code,
-                type="active"
-            )
-            phone_otp_send.delay(phone=phone, otp=code, main_message="active Town Market")
-
-        return Response(
-            {
-                "message": f"OTP  Sucessfully send to {phone} check your SMS box",
-            }, status=status.HTTP_200_OK
-        )
+        # Still-valid OTP: cooldown, same generic reply (no enumeration).
+        return Response({"message": GENERIC_OTP_MESSAGE})
 
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'otp'
 
     def post(self, request):
         phone = request.data.get("phone", None)
@@ -160,7 +170,7 @@ class VerifyOTPView(APIView):
         try:
             user = User.objects.get(phone=phone)
         except User.DoesNotExist:
-            return Response({"error": "Invalid user"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
         otp = user.otps.filter(type='reset').first()
 
@@ -176,7 +186,7 @@ class VerifyOTPView(APIView):
         if otp.is_expired():
             return Response({"error": "OTP is expired"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if otp.code != code:
+        if not otp.matches(code):
             otp.record_failed_attempt()
             return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -187,6 +197,7 @@ class VerifyOTPView(APIView):
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'otp'
 
     def post(self, request):
         data = request.data
@@ -213,7 +224,7 @@ class ResetPasswordView(APIView):
         try:
             user = User.objects.prefetch_related("otps").get(phone=phone)
         except User.DoesNotExist:
-            return Response({"error": "Invalid User"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
         otp = user.otps.filter(type="reset").first()
 
@@ -229,9 +240,14 @@ class ResetPasswordView(APIView):
         if otp.is_expired():
             return Response({"error": "Otp is expired"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if otp.code != code:
+        if not otp.matches(code):
             otp.record_failed_attempt()
             return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_password(password, user=user)
+        except ValidationError as e:
+            return Response({"error": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
         user.set_password(password)
         user.save(update_fields=['password'])

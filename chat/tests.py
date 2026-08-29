@@ -406,6 +406,9 @@ class ChatAPITests(APITestCase, ChatTestDataMixin):
         m1 = Message.objects.create(
             conversation=conversation, sender=self.buyer_user, content="First"
         )
+        from django.utils import timezone
+        from datetime import timedelta
+        Message.objects.filter(pk=m1.pk).update(created_at=timezone.now() - timedelta(seconds=10))
         m2 = Message.objects.create(
             conversation=conversation, sender=self.seller_user, content="Second"
         )

@@ -37,6 +37,8 @@ class AddToCartView(APIView):
 
             requested_quantity = cart_item.quantity + quantity
             if variant.available_stock < requested_quantity:
+                if created:
+                    cart_item.delete()
                 return Response(
                     {
                         'error': f'Not enough available stock. Only {variant.available_stock} left.',

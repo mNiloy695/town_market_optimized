@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────
 #  PRODUCTION Docker mode
-#  • Gunicorn serves Django (no runserver)
+#  • Daphne serves Django over ASGI (WebSocket chat support)
 #  • Nginx reverse proxy on host port 8082 → Django
 #  • Static/media served via Nginx
 #  • restart: always on every service
@@ -17,7 +17,7 @@ services:
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
-             gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
+             daphne -b 0.0.0.0 -p 8000 core.asgi:application"
     volumes:
       - townmarket_static_volume:/app/staticfiles
       - townmarket_media_volume:/app/media

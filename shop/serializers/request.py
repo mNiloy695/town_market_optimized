@@ -39,6 +39,13 @@ class RequestForShopSerializer(serializers.ModelSerializer):
         from .shop import ShopSerializer
         return ShopSerializer(obj.shop).data
 
+    def validate_status(self, value):
+        request = self.context.get('request')
+        if request and not request.user.is_staff:
+            if value != 'pending':
+                raise serializers.ValidationError("Only staff members can set or change the status of a shop request.")
+        return value
+
     def validate(self, attrs):
         if self.instance is not None:
             return attrs
@@ -59,6 +66,8 @@ class RequestForShopSerializer(serializers.ModelSerializer):
         shop = Shop.objects.create(owner=user, **shop_data)
         if categories:
             shop.Category.set(categories)
+        if not user.is_staff:
+            validated_data['status'] = 'pending'
         request_obj = RequestForShop.objects.create(
             user=user,
             shop=shop,

@@ -57,12 +57,16 @@ class CartSerializer(serializers.ModelSerializer):
         return sum(item.product_variant.price * item.quantity for item in obj.items.all())
 
     def get_shipping_total(self, obj):
-        from django.conf import settings
-        shipping_fee_per_shop = getattr(settings, 'SHIPPING_FEE', 50)
+        from collections import defaultdict
+        shop_shipping_fees = defaultdict(list)
+        for item in obj.items.all():
+            product = item.product_variant.product
+            fee = getattr(product, 'shipping_fee', 50)
+            if fee is None:
+                fee = 50
+            shop_shipping_fees[product.shop_id].append(fee)
         
-        # Get unique shops in the cart
-        shops = set(item.product_variant.product.shop_id for item in obj.items.all())
-        return len(shops) * shipping_fee_per_shop
+        return sum(max(fees) for fees in shop_shipping_fees.values())
 
     def get_grand_total(self, obj):
         return self.get_subtotal(obj) + self.get_shipping_total(obj)

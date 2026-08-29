@@ -40,6 +40,11 @@ class BkashSuccessCallbackView(APIView):
             logger.warning("bKash success callback without payment_id")
             return redirect('/payment/failed?error=missing_payment_id')
 
+        # 1. Pre-execution idempotency check
+        invoice = Invoice.objects.filter(val_id=payment_id).first()
+        if invoice and (invoice.is_paid or (invoice.order and invoice.order.is_paid)):
+            return redirect(f'/payment/success?order_number={invoice.order.order_number}')
+
         bkash = BkashService()
         result = bkash.execute_payment(payment_id)
 
@@ -48,6 +53,10 @@ class BkashSuccessCallbackView(APIView):
                 "bKash execute_payment failed: paymentID=%s error=%s",
                 payment_id, result.get('error'),
             )
+            # Double-check: in case another thread processed it after our check above
+            invoice = Invoice.objects.filter(val_id=payment_id).first()
+            if invoice and (invoice.is_paid or (invoice.order and invoice.order.is_paid)):
+                return redirect(f'/payment/success?order_number={invoice.order.order_number}')
             # Execute failed — order stays pending_payment, Celery task will clean up
             return redirect(f'/payment/failed?error=payment_execution_failed&payment_id={payment_id}')
 
@@ -71,12 +80,37 @@ class BkashSuccessCallbackView(APIView):
         except (InvalidOperation, TypeError, ValueError):
             paid_amount = Decimal('0')
 
-        if paid_amount != order.total_amount:
+        if paid_amount != order.shipping_fee:
             logger.warning(
                 "bKash amount mismatch: order=%s expected=%s got=%s",
-                order.order_number, order.total_amount, paid_amount,
+                order.order_number, order.shipping_fee, paid_amount,
             )
             order.fail_order(reason='bKash payment amount mismatch')
+
+            MoneyDectedButOrderFailed.objects.update_or_create(
+                order=order,
+                transaction_id=result.get('trx_id', '') or payment_id,
+                defaults={
+                    'reason': 'bKash amount mismatch after execute_payment — manual reconciliation/refund required',
+                    'amount': paid_amount,
+                    'phone': order.phone_number,
+                    'card_type': 'bkash',
+                },
+            )
+            try:
+                invoice = Invoice.objects.filter(order=order).order_by('-created_at').first()
+            except Invoice.DoesNotExist:
+                invoice = None
+            if invoice:
+                invoice.status = 'MONEY_DEDUCTED_ORDER_FAILED'
+                invoice.gateway_status = 'SUCCESS'
+                invoice.is_paid = False
+                invoice.val_id = payment_id
+                invoice.bank_tran_id = result.get('trx_id', '')
+                invoice.card_type = 'bkash'
+                invoice.amount = paid_amount
+                invoice.currency = result.get('currency', 'BDT')
+                invoice.save()
             return redirect(f'/payment/failed?error=amount_mismatch&order_number={order.order_number}')
 
         # Confirm payment inside transaction
@@ -113,6 +147,18 @@ class BkashSuccessCallbackView(APIView):
                 )
         except Exception as e:
             logger.exception("bKash confirmation error for paymentID=%s", payment_id)
+            if order.status not in ['confirmed', 'cancelled', 'failed']:
+                order.fail_order(reason='bKash confirmation error')
+            MoneyDectedButOrderFailed.objects.update_or_create(
+                order=order,
+                transaction_id=result.get('trx_id', '') or payment_id,
+                defaults={
+                    'reason': 'bKash execute_payment succeeded but order confirmation failed',
+                    'amount': paid_amount,
+                    'phone': order.phone_number,
+                    'card_type': 'bkash',
+                },
+            )
             return redirect(f'/payment/failed?error=confirmation_error&order_number={order.order_number}')
 
         return redirect(f'/payment/success?order_number={order.order_number}')

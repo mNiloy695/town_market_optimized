@@ -10,7 +10,8 @@ User = get_user_model()
 
 class AccountsAPITests(APITestCase):
     def setUp(self):
-        pass
+        from django.core.cache import cache
+        cache.clear()
 
     @patch('accounts.views.auth.phone_otp_send.delay')
     def test_user_registration_flow_success(self, mock_otp_send):
@@ -102,12 +103,12 @@ class AccountsAPITests(APITestCase):
             name="Test User",
             is_active=False
         )
-        otp = OTP.objects.create(user=user, code="1234", type="active")
+        otp = OTP.objects.create(user=user, code="123456", type="active")
         
         data = {
             "phone": "01806779331",
             "country_code": "BD",
-            "code": "1234"
+            "code": "123456"
         }
         response = self.client.post('/v1/accounts/auth/active/', data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -126,12 +127,12 @@ class AccountsAPITests(APITestCase):
             name="Test User",
             is_active=False
         )
-        OTP.objects.create(user=user, code="1234", type="active")
+        OTP.objects.create(user=user, code="123456", type="active")
         
         data = {
             "phone": "01806779331",
             "country_code": "BD",
-            "code": "9999"
+            "code": "999999"
         }
         response = self.client.post('/v1/accounts/auth/active/', data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -149,7 +150,7 @@ class AccountsAPITests(APITestCase):
             name="Test User",
             is_active=False
         )
-        otp = OTP.objects.create(user=user, code="1234", type="active")
+        otp = OTP.objects.create(user=user, code="123456", type="active")
         # Force set created_at to past to expire it
         otp.created_at = timezone.now() - timezone.timedelta(minutes=10)
         otp.save()
@@ -157,7 +158,7 @@ class AccountsAPITests(APITestCase):
         data = {
             "phone": "01806779331",
             "country_code": "BD",
-            "code": "1234"
+            "code": "123456"
         }
         response = self.client.post('/v1/accounts/auth/active/', data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -172,12 +173,12 @@ class AccountsAPITests(APITestCase):
             name="Test User",
             is_active=False
         )
-        otp = OTP.objects.create(user=user, code="1234", type="active")
+        otp = OTP.objects.create(user=user, code="123456", type="active")
         
         data = {
             "phone": "01806779331",
             "country_code": "BD",
-            "code": "9999"
+            "code": "999999"
         }
         
         # Make 5 failed attempts
@@ -274,18 +275,19 @@ class AccountsAPITests(APITestCase):
             name="Test User",
             is_active=True
         )
-        OTP.objects.create(user=user, code="5678", type="reset")
+        OTP.objects.create(user=user, code="567890", type="reset")
         
         data = {
             "phone": "01806779331",
             "country_code": "BD",
-            "code": "5678"
+            "code": "567890"
         }
         response = self.client.post('/v1/accounts/auth/verify-otp/', data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_reset_password_success(self):
-        """Test password reset successfully with valid OTP"""
+        """Test password reset successfully with valid OTP — must NOT
+        auto-activate a deactivated/inactive account."""
         user = User.objects.create_user(
             phone="01806779331",
             country_code="BD",
@@ -293,12 +295,39 @@ class AccountsAPITests(APITestCase):
             name="Test User",
             is_active=False
         )
-        OTP.objects.create(user=user, code="5678", type="reset")
+        OTP.objects.create(user=user, code="567890", type="reset")
         
         data = {
             "phone": "01806779331",
             "country_code": "BD",
-            "code": "5678",
+            "code": "567890",
+            "password": "NewSecurePassword123",
+            "confirm_password": "NewSecurePassword123"
+        }
+        response = self.client.post('/v1/accounts/auth/reset-password/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+        self.assertFalse(user.is_verified)
+        self.assertTrue(user.check_password("NewSecurePassword123"))
+
+    def test_reset_password_does_not_touch_activation_flags(self):
+        """Resetting a password of an active/verified user keeps them active."""
+        user = User.objects.create_user(
+            phone="01806779331",
+            country_code="BD",
+            password="SecurePassword123",
+            name="Test User",
+            is_active=True,
+            is_verified=True
+        )
+        OTP.objects.create(user=user, code="567890", type="reset")
+        
+        data = {
+            "phone": "01806779331",
+            "country_code": "BD",
+            "code": "567890",
             "password": "NewSecurePassword123",
             "confirm_password": "NewSecurePassword123"
         }
@@ -309,6 +338,27 @@ class AccountsAPITests(APITestCase):
         self.assertTrue(user.is_active)
         self.assertTrue(user.is_verified)
         self.assertTrue(user.check_password("NewSecurePassword123"))
+
+    def test_reset_password_weak_password_rejected(self):
+        """Reset must enforce Django password validators (no weak passwords)."""
+        user = User.objects.create_user(
+            phone="01806779331",
+            country_code="BD",
+            password="SecurePassword123",
+            name="Test User",
+            is_active=True
+        )
+        OTP.objects.create(user=user, code="567890", type="reset")
+        
+        data = {
+            "phone": "01806779331",
+            "country_code": "BD",
+            "code": "567890",
+            "password": "12345678",
+            "confirm_password": "12345678"
+        }
+        response = self.client.post('/v1/accounts/auth/reset-password/', data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_change_password_success(self):
         """Test authenticated user successfully changes password"""
@@ -389,3 +439,95 @@ class AccountsAPITests(APITestCase):
         self.assertFalse(User.objects.filter(id=u1.id).exists())
         self.assertTrue(User.objects.filter(id=u2.id).exists())
         self.assertTrue(User.objects.filter(id=u3.id).exists())
+
+
+class SecurityRegressionTests(APITestCase):
+    def setUp(self):
+        self.staff_user = User.objects.create_user(
+            phone="01711111111",
+            country_code="BD",
+            password="StaffPassword123",
+            name="Staff User",
+            is_staff=True,
+            is_active=True
+        )
+        self.regular_user = User.objects.create_user(
+            phone="01722222222",
+            country_code="BD",
+            password="UserPassword123",
+            name="Regular User",
+            is_active=True
+        )
+        self.superuser = User.objects.create_superuser(
+            phone="01733333333",
+            country_code="BD",
+            password="SuperPassword123"
+        )
+
+    def test_staff_cannot_escalate_self_to_superuser(self):
+        """Staff users should not be able to escalate themselves to superuser."""
+        self.client.force_authenticate(user=self.staff_user)
+        # Attempt to escalate self
+        data = {"is_superuser": True}
+        response = self.client.patch(f'/v1/accounts/admin/users/{self.staff_user.id}/', data)
+        # Should be forbidden for non-superuser to write sensitive fields
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.staff_user.refresh_from_db()
+        self.assertFalse(self.staff_user.is_superuser)
+
+    def test_staff_cannot_modify_other_admin_accounts(self):
+        """Staff users should not be able to modify superuser accounts."""
+        self.client.force_authenticate(user=self.staff_user)
+        data = {"name": "Hacked Admin"}
+        response = self.client.patch(f'/v1/accounts/admin/users/{self.superuser.id}/', data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_superuser_can_modify_any_user(self):
+        """Superuser accounts can modify staff roles/fields."""
+        self.client.force_authenticate(user=self.superuser)
+        data = {"role": "seller", "is_superuser": True}
+        response = self.client.patch(f'/v1/accounts/admin/users/{self.staff_user.id}/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.staff_user.refresh_from_db()
+        self.assertTrue(self.staff_user.is_superuser)
+
+    def test_buyer_cannot_self_approve_shop_request(self):
+        """A buyer cannot POST a shop request with status='approved' to become seller."""
+        self.client.force_authenticate(user=self.regular_user)
+        data = {
+            "status": "approved",
+            "shop_data": {
+                "name": "My Shop",
+                "phone": "+8801722222222",
+                "address": "Dhaka",
+            }
+        }
+        response = self.client.post('/v1/shop/request/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Only staff members can set or change the status of a shop request.", str(response.data))
+        self.regular_user.refresh_from_db()
+        self.assertEqual(self.regular_user.role, "buyer")
+
+    def test_cleanup_unverified_users_protects_admins(self):
+        """The cleanup task must never delete staff or superuser accounts, even if unverified."""
+        # Unverified staff created 20 minutes ago
+        u_staff = User.objects.create_user(
+            phone="01744444444", country_code="BD", password="Password123", name="Staff", is_active=False, is_staff=True
+        )
+        u_staff.date_joined = timezone.now() - timezone.timedelta(minutes=20)
+        u_staff.save()
+
+        # Unverified superuser created 20 minutes ago
+        u_super = User.objects.create_superuser(
+            phone="01755555555", country_code="BD", password="Password123"
+        )
+        u_super.is_verified = False
+        u_super.date_joined = timezone.now() - timezone.timedelta(minutes=20)
+        u_super.save()
+
+        # Run cleanup task
+        cleanup_unverified_users()
+
+        # Verify both admin users are preserved
+        self.assertTrue(User.objects.filter(id=u_staff.id).exists())
+        self.assertTrue(User.objects.filter(id=u_super.id).exists())

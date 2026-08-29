@@ -63,6 +63,8 @@ class Order(models.Model):
         default='sslcommerz'
     )
     is_paid = models.BooleanField(default=False)
+    shipping_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    cod_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -86,6 +88,22 @@ class Order(models.Model):
 
     def get_order_number(self):
         return self.order_number
+
+    def get_gateway_transaction_id(self):
+        """Best-effort gateway transaction id from the latest invoice.
+
+        Used to hand a refund processor the id they need for manual
+        reconciliation (SSLCommerz val_id / bank_tran_id, bKash trxID).
+        """
+        invoice = self.invoice_set.order_by('-created_at').first()
+        if invoice:
+            return (
+                invoice.bank_tran_id
+                or invoice.val_id
+                or invoice.transaction_id
+                or ''
+            )
+        return ''
 
     def confirm_payment(self):
         from django.db import transaction
@@ -128,6 +146,15 @@ class Order(models.Model):
                     description='Payment confirmed - stock reserved',
                     created_by=self.user
                 )
+
+            # log ledger entry for booking payment (shipping fees)
+            from .ledger import FinancialLedgerEntry
+            FinancialLedgerEntry.log_booking_payment(
+                order=locked_order,
+                amount=locked_order.shipping_fee,
+                reference_id=locked_order.get_gateway_transaction_id(),
+                recorded_by=self.user
+            )
 
     def fail_order(self, reason=None):
         from django.db import transaction
@@ -179,7 +206,7 @@ class Order(models.Model):
             return True, None
 
         else:
-            return False, f"Cannot cancel order in '{self.status}' status. Only 'pending_payment' or 'confirmed' orders (within 20 minutes) can be cancelled."
+            return False, f"Cannot cancel order in '{self.status}' status. Only 'pending_payment' or 'confirmed' orders (within 1 hour) can be cancelled."
 
     def cancel_order(self, reason=None):
         from django.db import transaction
@@ -227,6 +254,31 @@ class Order(models.Model):
                         action='cancelled',
                         description=reason or 'Order cancelled by customer',
                         created_by=self.user
+                    )
+
+                    # Calculate refund: 95% of shipping fee, 5% processing fee retained
+                    from decimal import Decimal
+                    refund_amount = (shop_order.shipping_fee * Decimal('0.95')).quantize(Decimal('0.01'))
+                    cancellation_charge = shop_order.shipping_fee - refund_amount
+
+                    from .refund_record import RefundRecord
+                    RefundRecord.objects.create(
+                        order=locked_order,
+                        shop_order=shop_order,
+                        gateway=RefundRecord._gateway_for(locked_order),
+                        gateway_transaction_id=locked_order.get_gateway_transaction_id(),
+                        amount=refund_amount,
+                        reason=reason or f'Cancelled confirmed (paid) order within 1-hour window (95% refund of shipping fee: TK {refund_amount}, 5% platform fee: TK {cancellation_charge})',
+                        created_by=self.user,
+                    )
+
+                    # Log ledger entry for refund & platform cancellation fee split
+                    from .ledger import FinancialLedgerEntry
+                    FinancialLedgerEntry.log_cancellation_refund(
+                        order=locked_order,
+                        refund_amount=refund_amount,
+                        cancellation_charge=cancellation_charge,
+                        recorded_by=self.user
                     )
 
         return True, "Order cancelled successfully"

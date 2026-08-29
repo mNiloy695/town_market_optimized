@@ -16,7 +16,10 @@ from .views import (
     PaymentConfirmationView,
     OrderReturnRequestView,
     VendorReturnApprovalView,
-    PayNowView
+    PayNowView,
+    AdminFinancialDashboardView,
+    MerchantFinancialDashboardView,
+    AdminCreateSettlementView
 )
 
 app_name = 'order'
@@ -37,6 +40,11 @@ urlpatterns = [
     path('vendor/orders/<int:shop_order_id>/status/', VendorOrderStatusUpdateView.as_view(), name='vendor-order-status'),
     path('vendor/orders/<int:shop_order_id>/return-approval/', VendorReturnApprovalView.as_view(), name='vendor-return-approval'),
     path('vendor/stats/', VendorDashboardStatsView.as_view(), name='vendor-stats'),
+    path('vendor/financials/', MerchantFinancialDashboardView.as_view(), name='vendor-financials'),
+
+    # Admin endpoints
+    path('admin/financials/', AdminFinancialDashboardView.as_view(), name='admin-financials'),
+    path('admin/settlements/create/', AdminCreateSettlementView.as_view(), name='admin-create-settlement'),
 
     # SSLCommerz webhook
     path('webhook/sslcommerz/', IpnViewWebhookSSLCommerze.as_view(), name='sslcommerz-webhook'),

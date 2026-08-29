@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
 
 
 class ChangingPassword(serializers.Serializer):
@@ -16,15 +17,20 @@ class ChangingPassword(serializers.Serializer):
             raise serializers.ValidationError({"error": "Current Password field is required."})
 
         if not new_password:
-            raise serializers.ValidationError({"error": "Current Password field cannot be null."})
+            raise serializers.ValidationError({"error": "New password field cannot be null."})
 
         if not confirm_password:
-            raise serializers.ValidationError({"error": "Current Password field cannot be null."})
+            raise serializers.ValidationError({"error": "Confirm password field cannot be null."})
 
         if new_password != confirm_password:
             raise serializers.ValidationError({"error": "New password and confirm password do not match."})
 
         if not user.check_password(current_password):
             raise serializers.ValidationError({"error": "Your current password is incorrect."})
+
+        try:
+            validate_password(new_password, user=user)
+        except Exception as e:
+            raise serializers.ValidationError({"error": list(e.messages)})
 
         return attrs

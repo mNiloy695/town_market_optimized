@@ -64,7 +64,10 @@ class ProductSerializer(serializers.ModelSerializer):
         return result
 
     def get_eligible_for_review(self, obj):
-        user = self.context['request'].user
+        request = self.context.get('request')
+        if not request or not request.user:
+            return False
+        user = request.user
         if not user.is_authenticated:
             return False
 

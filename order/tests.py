@@ -273,3 +273,82 @@ class OrderCancellationTests(TestCase):
         shop_order.refresh_from_db()
         self.assertEqual(order.status, "confirmed")
         self.assertEqual(shop_order.status, "processing")
+
+
+from rest_framework.test import APITestCase
+from rest_framework import status
+
+class FinancialDashboardAPITests(APITestCase):
+    def setUp(self):
+        # Create users
+        self.admin_user = User.objects.create_superuser(
+            phone="01799999999",
+            country_code="BD",
+            password="AdminPassword123"
+        )
+        self.vendor_user = User.objects.create_user(
+            phone="01788888888",
+            country_code="BD",
+            password="VendorPassword123",
+            name="Vendor User"
+        )
+        self.customer = User.objects.create_user(
+            phone="01777777777",
+            country_code="BD",
+            password="CustomerPassword123",
+            name="Customer User"
+        )
+
+        # Create market and shop
+        self.market = Market.objects.create(name="Feni Market", address="Feni")
+        self.category = Category.objects.create(name="Electronics", slug="electronics")
+        self.shop = Shop.objects.create(
+            name="Feni Electronics",
+            address="Feni",
+            market=self.market,
+            owner=self.vendor_user,
+            status="approved"
+        )
+
+        # Create order & shop order
+        self.order = Order.objects.create(
+            user=self.customer,
+            total_amount=Decimal("200.00"),
+            status="delivered",
+            is_paid=True,
+            confirmed_at=timezone.now(),
+            shipping_address="123 Street",
+            shipping_city="Feni",
+            phone_number="01777777777",
+            payment_method="sslcommerz"
+        )
+        self.shop_order = ShopOrder.objects.create(
+            order=self.order,
+            shop=self.shop,
+            status="delivered",
+            settlement_status="unsettled",
+            subtotal=Decimal("150.00"),
+            total=Decimal("200.00"),
+            shipping_fee=Decimal("50.00"),
+            platform_commission=Decimal("15.00"),
+            merchant_net=Decimal("135.00")
+        )
+
+    def test_admin_financial_dashboard_success(self):
+        """Admin can access financial dashboard, and it queries correctly without FieldError."""
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get('/v1/order/admin/financials/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Verify stats and unsettled shops
+        self.assertIn("stats", response.data)
+        self.assertIn("unsettled_shops", response.data)
+        unsettled_shops = response.data["unsettled_shops"]
+        self.assertEqual(len(unsettled_shops), 1)
+        self.assertEqual(unsettled_shops[0]["shop_id"], self.shop.id)
+        self.assertAlmostEqual(float(unsettled_shops[0]["net_payout"]), 35.0) # 50.00 shipping_fee - 15.00 commission
+
+    def test_non_admin_cannot_access_admin_financial_dashboard(self):
+        """Non-admin user cannot access admin financial dashboard."""
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.get('/v1/order/admin/financials/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

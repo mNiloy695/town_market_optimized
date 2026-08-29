@@ -37,7 +37,7 @@ class OrderListSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'order_number', 'total_amount', 'status', 'shop_count', 'created_at',
-            'can_be_cancelled', 'cancellation_reason'
+            'can_be_cancelled', 'cancellation_reason', 'confirmed_at'
         ]
         read_only_fields = fields
 

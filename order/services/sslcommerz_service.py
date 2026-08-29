@@ -39,7 +39,7 @@ class SslCommerzService:
         post_data = {
             'store_id': self.store_id,
             'store_passwd': self.store_password,
-            'total_amount': float(order.total_amount),
+            'total_amount': float(order.shipping_fee),
             'currency': 'BDT',
             'tran_id': order.order_number,
             'success_url': webhook_url,

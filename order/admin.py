@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Order, ShopOrder, OrderItem, OrderTimeline
+from .models import (
+    Order, ShopOrder, OrderItem, OrderTimeline, RefundRecord
+)
 
 
 class OrderItemInline(admin.TabularInline):
@@ -229,7 +231,7 @@ class OrderTimelineAdmin(admin.ModelAdmin):
 
 
 
-from .models import MoneyDectedButOrderFailed
+from .models import MoneyDectedButOrderFailed, RefundRecord
 
 @admin.register(MoneyDectedButOrderFailed)
 class MoneyDectedButOrderFailedAdmin(admin.ModelAdmin):
@@ -251,3 +253,52 @@ class MoneyDectedButOrderFailedAdmin(admin.ModelAdmin):
     )
     
     can_delete = False
+
+
+@admin.register(RefundRecord)
+class RefundRecordAdmin(admin.ModelAdmin):
+    """Manual-reconciliation queue for refunds (initiated by an operator).
+    Refunds are never executed automatically — the operator uses the stored
+    gateway transaction id to initiate the refund at the payment provider.
+    """
+    list_display = (
+        'id', 'order', 'gateway', 'amount', 'status', 'created_at'
+    )
+    list_filter = ('gateway', 'status', 'created_at')
+    search_fields = (
+        'order__order_number', 'gateway_transaction_id',
+        'shop_order__shop__name',
+    )
+    readonly_fields = (
+        'order', 'shop_order', 'gateway', 'gateway_transaction_id',
+        'amount', 'reason', 'created_by', 'created_at', 'updated_at',
+    )
+
+    actions = ['mark_processed', 'mark_declined']
+
+    @admin.action(description="Mark selected refunds as processed")
+    def mark_processed(self, request, queryset):
+        updated = queryset.filter(status='pending').update(
+            status='processed', resolved_by=request.user
+        )
+        self.message_user(request, f"{updated} refunds marked as processed.")
+
+    @admin.action(description="Mark selected refunds as declined")
+    def mark_declined(self, request, queryset):
+        updated = queryset.filter(status='pending').update(
+            status='declined', resolved_by=request.user
+        )
+        self.message_user(request, f"{updated} refunds marked as declined.")
+
+    fieldsets = (
+        ('Refund Information', {
+            'fields': ('order', 'shop_order', 'gateway', 'gateway_transaction_id', 'amount', 'reason')
+        }),
+        ('Status', {
+            'fields': ('status', 'created_by', 'resolved_by')
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )

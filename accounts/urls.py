@@ -23,7 +23,7 @@ urlpatterns = [
     path("auth/reset-password/",ResetPasswordView.as_view(),name="reset-password"),
     path("auth/password-change/",ChangePasswordView.as_view(),name='password-change'),
     path('auth/profile/',user_profile_view,name='profile'),
-    path("auth/token/refresh/",refresh_token_view, name='token_refresh'),
+    path("auth/token/refresh/", TokenRefreshView.as_view(), name='token_refresh'),
     path('admin/users/', admin_users_list_view, name='admin-users-list'),
     path('admin/users/<int:pk>/', admin_user_detail_view, name='admin-user-detail'),
 ]

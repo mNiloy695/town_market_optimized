@@ -64,7 +64,7 @@ def get_conversation_messages(conversation_id: str, user, after=None):
     )
     if after:
         qs = qs.filter(created_at__gt=after)
-    return qs.order_by('-created_at')
+    return qs.order_by('created_at')
 
 
 def is_user_online(user_id) -> bool:

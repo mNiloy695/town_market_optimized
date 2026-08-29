@@ -13,14 +13,27 @@ class ParentProductCategory(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
-        if self.name:
-            base_slug = slugify(self.name)
-            slug = base_slug
-            counter = 1
-            while self.__class__.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base_slug}-{counter}"
-                counter += 1
-            self.slug = slug
+        from django.db import IntegrityError, transaction
+        from product.utils import set_unique_slug
+        
+        attempts = 5
+        counter = 1
+        while attempts > 0:
+            set_unique_slug(self)
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError as e:
+                err_msg = str(e).lower()
+                if 'slug' in err_msg or 'unique' in err_msg:
+                    from slugify import slugify
+                    base_slug = slugify(self.name)
+                    self.slug = f"{base_slug}-{counter}"
+                    counter += 1
+                    attempts -= 1
+                else:
+                    raise e
         super().save(*args, **kwargs)
 
 
@@ -35,14 +48,27 @@ class ProductCategory(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
-        if self.name:
-            base_slug = slugify(self.name)
-            slug = base_slug
-            counter = 1
-            while self.__class__.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base_slug}-{counter}"
-                counter += 1
-            self.slug = slug
+        from django.db import IntegrityError, transaction
+        from product.utils import set_unique_slug
+        
+        attempts = 5
+        counter = 1
+        while attempts > 0:
+            set_unique_slug(self)
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError as e:
+                err_msg = str(e).lower()
+                if 'slug' in err_msg or 'unique' in err_msg:
+                    from slugify import slugify
+                    base_slug = slugify(self.name)
+                    self.slug = f"{base_slug}-{counter}"
+                    counter += 1
+                    attempts -= 1
+                else:
+                    raise e
         super().save(*args, **kwargs)
 
 
@@ -58,14 +84,27 @@ class ProductCategoryOption(models.Model):
         return f"{self.product_category.name} - {self.name} -id {self.id}"
 
     def save(self, *args, **kwargs):
-        if self.name:
-            base_slug = slugify(self.name)
-            slug = base_slug
-            counter = 1
-            while self.__class__.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base_slug}-{counter}"
-                counter += 1
-            self.slug = slug
+        from django.db import IntegrityError, transaction
+        from product.utils import set_unique_slug
+        
+        attempts = 5
+        counter = 1
+        while attempts > 0:
+            set_unique_slug(self)
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError as e:
+                err_msg = str(e).lower()
+                if 'slug' in err_msg or 'unique' in err_msg:
+                    from slugify import slugify
+                    base_slug = slugify(self.name)
+                    self.slug = f"{base_slug}-{counter}"
+                    counter += 1
+                    attempts -= 1
+                else:
+                    raise e
         super().save(*args, **kwargs)
 
 

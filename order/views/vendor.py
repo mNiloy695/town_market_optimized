@@ -95,42 +95,70 @@ class VendorOrderStatusUpdateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        serializer = ShopOrderStatusUpdateSerializer(
-            shop_order, data=request.data, partial=True
-        )
-        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            shop_order = ShopOrder.objects.select_for_update().get(id=shop_order_id, shop=shop)
 
-        old_status = shop_order.status
-        updated_order = serializer.save()
+            serializer = ShopOrderStatusUpdateSerializer(
+                shop_order, data=request.data, partial=True
+            )
+            serializer.is_valid(raise_exception=True)
 
-        action_map = {
-            'confirmed': 'confirmed',
-            'processing': 'processing',
-            'shipped': 'shipped',
-            'delivered': 'delivered',
-            'cancelled': 'cancelled',
-            'return_requested': 'return_requested',
-            'returned': 'returned'
-        }
+            old_status = shop_order.status
+            updated_order = serializer.save()
 
-        OrderTimeline.objects.create(
-            shop_order=updated_order,
-            action=action_map.get(updated_order.status, 'status_changed'),
-            description=f'Status changed from {old_status} to {updated_order.status}',
-            created_by=request.user
-        )
+            action_map = {
+                'confirmed': 'confirmed',
+                'processing': 'processing',
+                'shipped': 'shipped',
+                'delivered': 'delivered',
+                'cancelled': 'cancelled',
+                'return_requested': 'return_requested',
+                'returned': 'returned'
+            }
 
-        if updated_order.status == 'confirmed':
-            updated_order.confirmed_at = timezone.now()
-        elif updated_order.status == 'shipped':
-            updated_order.shipped_at = timezone.now()
-        elif updated_order.status == 'delivered':
-            updated_order.delivered_at = timezone.now()
-        updated_order.save()
+            OrderTimeline.objects.create(
+                shop_order=updated_order,
+                action=action_map.get(updated_order.status, 'status_changed'),
+                description=f'Status changed from {old_status} to {updated_order.status}',
+                created_by=request.user
+            )
 
-        return Response(
-            ShopOrderDetailSerializer(updated_order, context={'request': request}).data
-        )
+            if updated_order.status == 'confirmed':
+                updated_order.confirmed_at = timezone.now()
+            elif updated_order.status == 'shipped':
+                updated_order.shipped_at = timezone.now()
+            elif updated_order.status == 'delivered':
+                updated_order.delivered_at = timezone.now()
+                updated_order.cod_collected = True
+
+            if updated_order.status == 'cancelled':
+                if old_status == 'pending':
+                    for item in updated_order.items.select_related('product_variant').all():
+                        variant = ProductVariant.objects.select_for_update().get(id=item.product_variant_id)
+                        variant.reserved_quantity = models.F('reserved_quantity') - item.quantity
+                        variant.save(update_fields=['reserved_quantity'])
+                elif old_status in ('confirmed', 'processing'):
+                    for item in updated_order.items.select_related('product_variant').all():
+                        variant = ProductVariant.objects.select_for_update().get(id=item.product_variant_id)
+                        variant.stock = models.F('stock') + item.quantity
+                        variant.save(update_fields=['stock'])
+
+                    from order.models import RefundRecord
+                    RefundRecord.create_for_shop_order(
+                        updated_order,
+                        reason=f'Vendor cancelled from {old_status} — manual refund reconciliation',
+                        user=request.user,
+                    )
+
+            updated_order.save()
+
+            if updated_order.status == 'delivered' and old_status != 'delivered':
+                from order.models.ledger import FinancialLedgerEntry
+                FinancialLedgerEntry.log_cod_delivery(updated_order, request.user)
+
+            return Response(
+                ShopOrderDetailSerializer(updated_order, context={'request': request}).data
+            )
 
 
 class VendorDashboardStatsView(APIView):
@@ -280,14 +308,21 @@ class VendorReturnApprovalView(APIView):
                     shop_order.status = 'returned'
                     shop_order.save()
 
+                    from order.models import RefundRecord
+                    RefundRecord.create_for_shop_order(
+                        shop_order,
+                        reason='Return approved — manual refund reconciliation required',
+                        user=request.user,
+                    )
+
                     OrderTimeline.objects.create(
                         shop_order=shop_order,
                         action='returned',
-                        description='Return approved - refund processed',
+                        description='Return approved - stock restored, refund pending manual processing',
                         created_by=request.user
                     )
 
-                    message = 'Return approved and stock restored'
+                    message = 'Return approved and stock restored. Refund will be processed manually.'
 
                 else:
                     reason = request.data.get('reason', 'Return request rejected')

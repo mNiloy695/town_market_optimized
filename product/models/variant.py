@@ -1,14 +1,20 @@
 from django.db import models
+from django.core.validators import MinValueValidator
+from decimal import Decimal
 from .product import Product
 from .category import ProductCategoryOptionValue
 
 
 class ProductVariant(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
-    price = models.DecimalField(max_digits=10, decimal_places=2)
+    price = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))]
+    )
     description = models.TextField(blank=True, null=True)
-    stock = models.IntegerField()
-    reserved_quantity = models.IntegerField(default=0)
+    stock = models.IntegerField(validators=[MinValueValidator(0)])
+    reserved_quantity = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
@@ -28,6 +34,10 @@ class ProductVariant(models.Model):
             models.CheckConstraint(
                 condition=models.Q(reserved_quantity__gte=0),
                 name='reserved_quantity_non_negative',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(stock__gte=models.F('reserved_quantity')),
+                name='stock_gte_reserved_quantity',
             ),
         ]
 

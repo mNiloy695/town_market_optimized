@@ -15,6 +15,7 @@ import os
 from decouple import config
 from datetime import timedelta
 from decimal import Decimal
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -142,14 +143,27 @@ ORDER_PAYMENT_TIMEOUT_MINUTES = config('ORDER_PAYMENT_TIMEOUT_MINUTES', default=
 STORE_ID = config('STORE_ID')
 STORE_PASSWORD = config('STORE_PASSWORD')
 
-# ✅ SSLCommerz URLs configurable — never hardcode sandbox in production.
-SSLCOMMERZ_API_URL = config(
+# ✅ Gateway URLs must never silently fall back to sandbox in production.
+def _gateway_url(key, sandbox_default):
+    """
+    Return the env value for a payment-gateway URL, refusing the sandbox
+    default whenever the application is not running in DEBUG mode.
+    """
+    value = config(key, default=sandbox_default)
+    if not DEBUG and not os.getenv(key):
+        raise ImproperlyConfigured(
+            f"{key} must be explicitly set when DEBUG=False "
+            f"(refusing sandbox default '{sandbox_default}')."
+        )
+    return value
+
+SSLCOMMERZ_API_URL = _gateway_url(
     'SSLCOMMERZ_API_URL',
-    default='https://sandbox.sslcommerz.com/gwprocess/v4/api.php',
+    'https://sandbox.sslcommerz.com/gwprocess/v4/api.php',
 )
-SSLCOMMERZ_VALIDATION_URL = config(
+SSLCOMMERZ_VALIDATION_URL = _gateway_url(
     'SSLCOMMERZ_VALIDATION_URL',
-    default='https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php',
+    'https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php',
 )
 
 # ✅ SMS Configuration
@@ -158,9 +172,9 @@ SMS_API_KEY = config('SMS_API_KEY', default='')
 # ✅ bKash Payment Gateway (PGW) settings
 BKASH_APP_KEY = config('BKASH_APP_KEY', default='')
 BKASH_APP_SECRET = config('BKASH_APP_SECRET', default='')
-BKASH_BASE_URL = config(
+BKASH_BASE_URL = _gateway_url(
     'BKASH_BASE_URL',
-    default='https://sandbox.pay.bka.sh/v1.2.0-beta',
+    'https://sandbox.pay.bka.sh/v1.2.0-beta',
 )
 
 # ✅ Celery Beat settings for periodic tasks
@@ -206,10 +220,12 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/minute',
         'user': '120/minute',
+        'otp': '5/minute',
     },
 }
 
@@ -279,37 +295,56 @@ except ImportError:
     get_service_status = lambda: {}
     R2 = None
 
-# ✅ R2 Configuration - derived from cloudflare module
-# These are exposed for Django storage backends and template usage
-CLOUDFLARE_R2_ACCOUNT_ID = os.getenv('CLOUDFLARE_R2_ACCOUNT_ID', '104dbc5609bc33780236c732ecf740dd')
+# ✅ R2 storage via the S3-compatible backend — enabled only when real
+# credentials are present, otherwise local FileSystemStorage (dev fallback).
+CLOUDFLARE_R2_ACCOUNT_ID = os.getenv('CLOUDFLARE_R2_ACCOUNT_ID', '')
 CLOUDFLARE_R2_ACCESS_KEY_ID = os.getenv('CLOUDFLARE_R2_ACCESS_KEY_ID', '')
 CLOUDFLARE_R2_SECRET_ACCESS_KEY = os.getenv('CLOUDFLARE_R2_SECRET_ACCESS_KEY', '')
 CLOUDFLARE_R2_BUCKET_NAME = os.getenv('CLOUDFLARE_R2_BUCKET_NAME', 'townmarket')
-
-# ✅ Storage backends - use R2 for both media and static files
-# These strings are required by Django's settings system
-DEFAULT_FILE_STORAGE = 'storages.backends.cloudflare.CloudFileStorage'
-STATICFILES_STORAGE = 'storages.backends.cloudflare.StaticCloudFileStorage'
-
-# ✅ R2 endpoint is auto-derived from account ID:
-# Format: https://<account-id>.r2.cloudflarestorage.com
-# No manual endpoint configuration needed
-# The actual R2 instance is available via: from core.cloudflare import r2
-
-# ✅ Optional: Custom domain (e.g., files.yourdomain.com)
-# Set CLOUDFLARE_R2_CUSTOM_DOMAIN env var to use custom CNAME
 CLOUDFLARE_R2_CUSTOM_DOMAIN = os.getenv('CLOUDFLARE_R2_CUSTOM_DOMAIN', default='')
 
-# ✅ File management settings
-AWS_S3_FILE_OVERWRITE = False  # Prevent overwriting existing files on re-upload
-DEFAULT_FILE_ACL = 'public-read'  # Allow public access to uploaded files
-FILE_POST_DELETE = True  # Delete files from R2 when Django model deleted
+R2_CONFIGURED = bool(
+    CLOUDFLARE_R2_ACCOUNT_ID
+    and CLOUDFLARE_R2_ACCESS_KEY_ID
+    and CLOUDFLARE_R2_SECRET_ACCESS_KEY
+    and CLOUDFLARE_R2_BUCKET_NAME
+    and 'your_r2_' not in CLOUDFLARE_R2_ACCESS_KEY_ID
+    and 'your_r2_' not in CLOUDFLARE_R2_SECRET_ACCESS_KEY
+)
 
-# ✅ Cache control for uploaded files
-AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': 'max-age=86400',
-    'ServerSideEncryption': 'AES256',
-}
+if R2_CONFIGURED:
+    # R2 is S3-compatible: point django-storages' S3 backend at the R2 endpoint.
+    AWS_S3_ENDPOINT_URL = f"https://{CLOUDFLARE_R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+    AWS_S3_ACCESS_KEY_ID = CLOUDFLARE_R2_ACCESS_KEY_ID
+    AWS_S3_SECRET_ACCESS_KEY = CLOUDFLARE_R2_SECRET_ACCESS_KEY
+    AWS_STORAGE_BUCKET_NAME = CLOUDFLARE_R2_BUCKET_NAME
+    AWS_S3_REGION_NAME = 'auto'
+    AWS_S3_ADDRESSING_STYLE = 'virtual'
+    AWS_S3_FILE_OVERWRITE = False
+    DEFAULT_FILE_ACL = 'public-read'
+    AWS_S3_OBJECT_PARAMETERS = {
+        'CacheControl': 'max-age=86400',
+    }
+    if CLOUDFLARE_R2_CUSTOM_DOMAIN:
+        AWS_S3_CUSTOM_DOMAIN = CLOUDFLARE_R2_CUSTOM_DOMAIN
+
+    STORAGES = {
+        'default': {
+            'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+        },
+        'staticfiles': {
+            'BACKEND': 'storages.backends.s3boto3.S3StaticStorage',
+        },
+    }
+else:
+    STORAGES = {
+        'default': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        },
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
+    }
 
 
 # ✅ OAuth / Social Auth settings (placeholder for future)
