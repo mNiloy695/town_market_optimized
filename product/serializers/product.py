@@ -21,7 +21,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ['id', 'name', 'is_stock', 'slug', 'shop', 'shop_data', 'average_rating', 'sub_category', 'sub_category_data', 'weight', 'variants', 'images', 'available_options', 'created_at', 'updated_at', 'eligible_for_review', 'reviews']
+        fields = ['id', 'name', 'is_stock', 'slug', 'shop', 'shop_data', 'average_rating', 'sub_category', 'sub_category_data', 'weight', 'shipping_fee', 'variants', 'images', 'available_options', 'created_at', 'updated_at', 'eligible_for_review', 'reviews']
         read_only_fields = ['shop', 'created_at', 'updated_at']
 
     def get_shop_data(self, obj):

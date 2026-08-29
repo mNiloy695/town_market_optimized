@@ -186,27 +186,24 @@ class Order(models.Model):
                 )
 
     def can_be_cancelled(self):
-        if self.status == 'pending_payment':
-            return True, None
+        if self.status == 'cancelled':
+            return False, "Order is already cancelled."
+        if self.status == 'failed':
+            return False, "Cannot cancel a failed order."
 
-        elif self.status == 'confirmed':
-            from datetime import timedelta
+        # Once shop owner confirms the order (status becomes 'confirmed' or further), it cannot be cancelled.
+        if self.shop_orders.exclude(status='pending').exists():
+            return False, "Once shop owner confirms the order, cancellation is unavailable."
 
-            if self.shop_orders.exclude(status__in=['pending', 'confirmed']).exists():
-                return False, "Once shop begins processing, cancellation unavailable."
+        # Cannot cancel after 1 hour of placing the order.
+        from django.utils import timezone
+        from datetime import timedelta
+        time_elapsed = timezone.now() - self.created_at
+        if time_elapsed > timedelta(hours=1):
+            minutes_elapsed = int(time_elapsed.total_seconds() / 60)
+            return False, f"Cancellation window closed. Order was placed {minutes_elapsed} minutes ago. You can only cancel within 1 hour of placing the order."
 
-            if not self.confirmed_at:
-                return False, "Order confirmation time is missing."
-
-            time_elapsed = timezone.now() - self.confirmed_at
-            if time_elapsed > timedelta(minutes=20):
-                minutes_elapsed = int(time_elapsed.total_seconds() / 60)
-                return False, f"Cancellation window closed. Order was confirmed {minutes_elapsed} minutes ago. You can only cancel within 20 minutes of confirmation."
-
-            return True, None
-
-        else:
-            return False, f"Cannot cancel order in '{self.status}' status. Only 'pending_payment' or 'confirmed' orders (within 1 hour) can be cancelled."
+        return True, None
 
     def cancel_order(self, reason=None):
         from django.db import transaction

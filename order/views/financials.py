@@ -93,6 +93,12 @@ class AdminFinancialDashboardView(APIView):
             total_paid_out = MerchantSettlement.objects.filter(
                 status='processed'
             ).aggregate(Sum('total_amount'))['total_amount__sum'] or Decimal('0.00')
+            
+            # 4. Total Commissions (just platform commission, not including cancellation charges)
+            total_commissions = FinancialLedgerEntry.objects.filter(
+                category=FinancialLedgerEntry.Category.PLATFORM_COMMISSION,
+                entry_type=FinancialLedgerEntry.EntryType.CREDIT
+            ).aggregate(Sum('amount'))['amount__sum'] or Decimal('0.00')
 
             # 4. Paginated Ledger entries
             ledger_qs = FinancialLedgerEntry.objects.select_related('order', 'shop', 'recorded_by').all()
@@ -108,7 +114,9 @@ class AdminFinancialDashboardView(APIView):
             unsettled_shops_data = []
             unsettled_shops = Shop.objects.filter(
                 orders__status='delivered',
-                orders__settlement_status='unsettled'
+                orders__settlement_status='unsettled',
+                is_active=True,
+                is_deactivated=False
             ).distinct()
             
             for shop in unsettled_shops:
@@ -131,11 +139,10 @@ class AdminFinancialDashboardView(APIView):
                 })
 
             return Response({
-                'stats': {
-                    'total_revenue': str(total_revenue),
-                    'total_liabilities': str(total_liabilities),
-                    'total_paid_out': str(total_paid_out)
-                },
+                'total_revenue': str(total_revenue),
+                'total_commissions': str(total_commissions),
+                'unsettled_merchant_liabilities': str(total_liabilities),
+                'total_paid_out': str(total_paid_out),
                 'ledger': {
                     'results': serialized_ledger,
                     'page': paginated_ledger['page'],
@@ -202,12 +209,10 @@ class MerchantFinancialDashboardView(APIView):
             serialized_settlements = [serialize_settlement(s) for s in paginated_settlements['results']]
 
             return Response({
-                'stats': {
-                    'total_earned': str(total_earned),
-                    'commission_deducted': str(commission_deducted),
-                    'unsettled_balance': str(unsettled_balance),
-                    'total_settled': str(total_settled)
-                },
+                'total_revenue': str(total_earned),
+                'commission_deducted': str(commission_deducted),
+                'unsettled_balance': str(unsettled_balance),
+                'paid_amount': str(total_settled),
                 'ledger': {
                     'results': serialized_ledger,
                     'page': paginated_ledger['page'],

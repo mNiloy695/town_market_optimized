@@ -120,33 +120,27 @@ class OrderCancellationTests(TestCase):
         self.assertEqual(self.variant.reserved_quantity, 0)
         self.assertEqual(self.variant.stock, 10)
 
-    def test_cancel_confirmed_order_within_20_minutes_restores_stock(self):
+    def test_cancel_order_within_1_hour_unconfirmed_succeeds(self):
         """
-        A confirmed order should be cancellable within 20 minutes of confirmation.
-        Cancelling it should restore the variant's actual stock, but not touch reserved_quantity.
+        An order should be cancellable within 1 hour of placing it if it is still unconfirmed by the shop owner.
         """
-        # Create confirmed order
         order = Order.objects.create(
             user=self.user,
             total_amount=Decimal("150.00"),
             status="confirmed",
             is_paid=True,
-            confirmed_at=timezone.now(),
             shipping_address="123 Street",
             shipping_city="feni",
             phone_number="01712345678",
             payment_method="sslcommerz"
         )
-
         shop_order = ShopOrder.objects.create(
             order=order,
             shop=self.shop,
-            status="confirmed",
-            confirmed_at=timezone.now(),
+            status="pending",  # Unconfirmed
             subtotal=Decimal("150.00"),
             total=Decimal("150.00")
         )
-
         OrderItem.objects.create(
             shop_order=shop_order,
             product_variant=self.variant,
@@ -154,104 +148,49 @@ class OrderCancellationTests(TestCase):
             price_at_purchase=Decimal("150.00")
         )
 
-        # Since payment is confirmed, actual stock is reduced and reservation released.
         self.variant.stock = 8
-        self.variant.reserved_quantity = 0
+        self.variant.reserved_quantity = 2
         self.variant.save()
 
-        # Perform cancellation
-        success, message = order.cancel_order(reason="Customer cancelled within 20 min")
+        # Perform cancellation within 1 hour
+        success, message = order.cancel_order(reason="Customer cancelled")
         self.assertTrue(success)
 
-        # Reload objects
+        # Reload
         order.refresh_from_db()
         shop_order.refresh_from_db()
         self.variant.refresh_from_db()
 
         self.assertEqual(order.status, "cancelled")
         self.assertEqual(shop_order.status, "cancelled")
-        self.assertEqual(self.variant.stock, 10)  # Stock restored to 10
-        self.assertEqual(self.variant.reserved_quantity, 0)  # Reserved quantity untouched
+        self.assertEqual(self.variant.stock, 10)  # Stock restored
 
-    def test_cancel_confirmed_order_after_20_minutes_fails(self):
+    def test_cancel_order_after_1_hour_fails(self):
         """
-        A confirmed order cannot be cancelled after 20 minutes of confirmation.
-        It should return the exact error message specified in requirements.
+        An order cannot be cancelled after 1 hour of placing it, even if shop orders are pending.
         """
-        # Create order confirmed 25 minutes ago
-        confirmed_time = timezone.now() - timedelta(minutes=25)
+        from datetime import timedelta
         order = Order.objects.create(
             user=self.user,
             total_amount=Decimal("150.00"),
             status="confirmed",
             is_paid=True,
-            confirmed_at=confirmed_time,
             shipping_address="123 Street",
             shipping_city="feni",
             phone_number="01712345678",
             payment_method="sslcommerz"
         )
-
-        shop_order = ShopOrder.objects.create(
-            order=order,
-            shop=self.shop,
-            status="confirmed",
-            confirmed_at=confirmed_time,
-            subtotal=Decimal("150.00"),
-            total=Decimal("150.00")
-        )
-
-        OrderItem.objects.create(
-            shop_order=shop_order,
-            product_variant=self.variant,
-            quantity=2,
-            price_at_purchase=Decimal("150.00")
-        )
-
-        self.variant.stock = 8
-        self.variant.reserved_quantity = 0
-        self.variant.save()
-
-        # Perform cancellation
-        success, message = order.cancel_order(reason="Customer cancelled too late")
-        self.assertFalse(success)
-        
-        # Checking exact error pattern
-        self.assertEqual(
-            message,
-            "Cancellation window closed. Order was confirmed 25 minutes ago. You can only cancel within 20 minutes of confirmation."
-        )
-
-        # Reload
+        # Force created_at in the past
+        Order.objects.filter(id=order.id).update(created_at=timezone.now() - timedelta(minutes=65))
         order.refresh_from_db()
-        self.variant.refresh_from_db()
-        self.assertEqual(order.status, "confirmed")
-        self.assertEqual(self.variant.stock, 8)
-
-    def test_cancel_confirmed_order_fails_if_shop_order_processing(self):
-        """
-        An order cancellation should fail if any associated ShopOrder is updated to processing.
-        """
-        order = Order.objects.create(
-            user=self.user,
-            total_amount=Decimal("150.00"),
-            status="confirmed",
-            is_paid=True,
-            confirmed_at=timezone.now(),
-            shipping_address="123 Street",
-            shipping_city="feni",
-            phone_number="01712345678",
-            payment_method="sslcommerz"
-        )
 
         shop_order = ShopOrder.objects.create(
             order=order,
             shop=self.shop,
-            status="processing",  # Vendor already processing
+            status="pending",
             subtotal=Decimal("150.00"),
             total=Decimal("150.00")
         )
-
         OrderItem.objects.create(
             shop_order=shop_order,
             product_variant=self.variant,
@@ -259,20 +198,41 @@ class OrderCancellationTests(TestCase):
             price_at_purchase=Decimal("150.00")
         )
 
-        self.variant.stock = 8
-        self.variant.reserved_quantity = 0
-        self.variant.save()
+        success, message = order.cancel_order(reason="Too late")
+        self.assertFalse(success)
+        self.assertIn("Cancellation window closed", message)
 
-        # Perform cancellation
+    def test_cancel_order_fails_if_shop_order_confirmed_or_processed(self):
+        """
+        An order cannot be cancelled if any associated ShopOrder has been confirmed by the vendor.
+        """
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("150.00"),
+            status="confirmed",
+            is_paid=True,
+            shipping_address="123 Street",
+            shipping_city="feni",
+            phone_number="01712345678",
+            payment_method="sslcommerz"
+        )
+        shop_order = ShopOrder.objects.create(
+            order=order,
+            shop=self.shop,
+            status="confirmed",  # Vendor already confirmed
+            subtotal=Decimal("150.00"),
+            total=Decimal("150.00")
+        )
+        OrderItem.objects.create(
+            shop_order=shop_order,
+            product_variant=self.variant,
+            quantity=2,
+            price_at_purchase=Decimal("150.00")
+        )
+
         success, message = order.cancel_order(reason="Customer cancel request")
         self.assertFalse(success)
-        self.assertEqual(message, "Once shop begins processing, cancellation unavailable.")
-
-        # Reload
-        order.refresh_from_db()
-        shop_order.refresh_from_db()
-        self.assertEqual(order.status, "confirmed")
-        self.assertEqual(shop_order.status, "processing")
+        self.assertEqual(message, "Once shop owner confirms the order, cancellation is unavailable.")
 
 
 from rest_framework.test import APITestCase
