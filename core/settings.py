@@ -177,6 +177,12 @@ BKASH_BASE_URL = _gateway_url(
     'https://sandbox.pay.bka.sh/v1.2.0-beta',
 )
 
+# ✅ Public base URL used to build payment-gateway callback URLs. When set, the
+# SSLCommerz webhook/callback registered with the gateway is built on top of
+# this URL instead of the request Host header (which may be an internal Docker
+# hostname). Empty -> fall back to the request's scheme+host.
+PAYMENT_CALLBACK_BASE_URL = config('PAYMENT_CALLBACK_BASE_URL', default='').rstrip('/')
+
 # ✅ Celery Beat settings for periodic tasks
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {

@@ -58,6 +58,10 @@ class ShopOrder(models.Model):
         ],
         default='unsettled'
     )
+    commission_paid = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0.00,
+        help_text="Commission amount already paid against this shop order (FIFO allocation)."
+    )
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)

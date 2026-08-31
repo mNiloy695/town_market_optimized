@@ -19,7 +19,8 @@ from .views import (
     PayNowView,
     AdminFinancialDashboardView,
     MerchantFinancialDashboardView,
-    AdminCreateSettlementView
+    AdminCreateSettlementView,
+    AdminCreateCommissionPaymentView
 )
 
 app_name = 'order'
@@ -45,6 +46,7 @@ urlpatterns = [
     # Admin endpoints
     path('admin/financials/', AdminFinancialDashboardView.as_view(), name='admin-financials'),
     path('admin/settlements/create/', AdminCreateSettlementView.as_view(), name='admin-create-settlement'),
+    path('admin/commission-payments/', AdminCreateCommissionPaymentView.as_view(), name='admin-create-commission-payment'),
 
     # SSLCommerz webhook
     path('webhook/sslcommerz/', IpnViewWebhookSSLCommerze.as_view(), name='sslcommerz-webhook'),

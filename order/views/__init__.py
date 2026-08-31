@@ -14,7 +14,7 @@ from .bkash import (
 )
 from .financials import (
     AdminFinancialDashboardView, MerchantFinancialDashboardView,
-    AdminCreateSettlementView
+    AdminCreateSettlementView, AdminCreateCommissionPaymentView
 )
 
 __all__ = [
@@ -36,4 +36,5 @@ __all__ = [
     'AdminFinancialDashboardView',
     'MerchantFinancialDashboardView',
     'AdminCreateSettlementView',
+    'AdminCreateCommissionPaymentView',
 ]

@@ -26,6 +26,9 @@ services:
       - .env
     environment:
       - DEBUG=True
+      # Public URL from which SSLCommerz callbacks redirect the buyer back.
+      # localhost:8000 mirrors the host-mapped port 8000 in this compose file.
+      - PAYMENT_CALLBACK_BASE_URL=http://localhost:8000
     depends_on:
       db:
         condition: service_healthy

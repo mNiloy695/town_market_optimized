@@ -11,10 +11,21 @@ from order.serializers import (
     ShopOrderDetailSerializer
 )
 from cart.models import Cart
-from core.settings import SHIPPING_FEE
+from core.settings import SHIPPING_FEE, PAYMENT_CALLBACK_BASE_URL
 from product.models import ProductVariant
 
 logger = logging.getLogger(__name__)
+
+
+def build_callback_url(request, path):
+    """Build a public callback URL for a payment gateway.
+
+    Prefers the configured PAYMENT_CALLBACK_BASE_URL (reachable from the
+    buyer's browser) and falls back to the request's own scheme+host.
+    """
+    if PAYMENT_CALLBACK_BASE_URL:
+        return PAYMENT_CALLBACK_BASE_URL + path
+    return request.build_absolute_uri(path)
 
 
 class CheckoutView(APIView):
@@ -140,8 +151,7 @@ class CheckoutView(APIView):
 
         sslcz = SslCommerzService()
 
-        base_url = f"{request.scheme}://{request.get_host()}"
-        webhook_url = base_url + reverse('order:sslcommerz-webhook')
+        webhook_url = build_callback_url(request, reverse('order:sslcommerz-webhook'))
 
         cus_name = request.user.phone or "Customer"
         if hasattr(request.user, 'get_full_name') and request.user.get_full_name():

@@ -16,6 +16,7 @@ class FinancialLedgerEntry(models.Model):
         SHIPPING_COLLECTED = 'shipping_collected', 'Shipping Collected'
         CUSTOMER_REFUND = 'customer_refund', 'Customer Refund'
         MERCHANT_SETTLEMENT = 'merchant_settlement', 'Merchant Settlement'
+        COMMISSION_PAYMENT = 'commission_payment', 'Commission Payment'
         CANCELLATION_CHARGE = 'cancellation_charge', 'Cancellation Charge'
         COD_COLLECTED = 'cod_collected', 'COD Collected'
 
@@ -160,9 +161,46 @@ class FinancialLedgerEntry(models.Model):
         )
 
     @classmethod
+    def log_commission_payment(cls, payment, recorded_by=None):
+        """Log a Merchant -> Platform commission payment received by the platform.
+
+        A single DEBIT entry encodes cash flowing in to the platform while
+        reducing the merchant's commission liability. The notes preserve the
+        audit trail of which order numbers were offset (FIFO allocation).
+        """
+        lines = list(payment.lines.select_related('shop_order__order').all())
+        if lines:
+            order_numbers = [
+                (f"{line.shop_order.get_order_number()} x{line.amount}")
+                for line in lines
+            ]
+        else:  # Legacy write linked via M2M before line-level tracking.
+            order_numbers = [so.get_order_number() for so in payment.shop_orders.all()]
+        order_numbers = order_numbers or ['(unallocated)']
+        cls.objects.create(
+            entry_type=cls.EntryType.DEBIT,
+            category=cls.Category.COMMISSION_PAYMENT,
+            amount=payment.amount,
+            shop=payment.shop,
+            reference_id=payment.transaction_reference,
+            notes=(
+                f"Commission payment {payment.payment_number} received from {payment.shop.name}: "
+                f"TK {payment.amount} (liability {payment.liability_before} -> {payment.liability_after}) "
+                f"applied to {', '.join(order_numbers)}"
+            ),
+            recorded_by=recorded_by
+        )
+
+    @classmethod
     def log_settlement(cls, settlement, recorded_by=None):
         """Log the net payout settlement execution to a merchant."""
         # Debit: Merchant Liabilities (Product earning settled, shipping settled)
+        if settlement.amount_product < 0 or settlement.amount_shipping < 0:
+            raise ValueError(
+                "Cannot log a settlement with negative amounts. "
+                "A merchant commission debt must be recorded as a CommissionPayment, "
+                "not as a negative MerchantSettlement payout."
+            )
         if settlement.amount_product > 0:
             cls.objects.create(
                 entry_type=cls.EntryType.DEBIT,

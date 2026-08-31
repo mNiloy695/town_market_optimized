@@ -129,13 +129,20 @@ SSLCOMMERZ_VALIDATION_URL = os.getenv(
 )
 
 
-#  bKash Payment Gateway settings
+# bKash Payment Gateway settings
 BKASH_APP_KEY = os.getenv('BKASH_APP_KEY', '')
 BKASH_APP_SECRET = os.getenv('BKASH_APP_SECRET', '')
 BKASH_BASE_URL = os.getenv(
     'BKASH_BASE_URL',
     'https://sandbox.pay.bka.sh/v1.2.0-beta',
 )
+
+
+# Public base URL used to build payment-gateway callback URLs (success/fail/
+# cancel/ipn). Set this to a URL reachable from the buyer's browser. When
+# empty, callbacks fall back to the request's own scheme+host, which inside
+# Docker resolves to the internal service hostname (e.g. townmarket-web-dev).
+PAYMENT_CALLBACK_BASE_URL = os.getenv('PAYMENT_CALLBACK_BASE_URL', '').rstrip('/')
 
 
 # Commission percentage

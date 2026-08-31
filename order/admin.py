@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
-    Order, ShopOrder, OrderItem, OrderTimeline, RefundRecord
+    Order, ShopOrder, OrderItem, OrderTimeline, RefundRecord,
+    CommissionPayment, CommissionPaymentLine, FinancialLedgerEntry
 )
 
 
@@ -229,6 +230,80 @@ class OrderTimelineAdmin(admin.ModelAdmin):
         return "System"
     created_by_display.short_description = 'Created By'
 
+
+
+class CommissionPaymentLineInline(admin.TabularInline):
+    model = CommissionPaymentLine
+    extra = 0
+    can_delete = False
+    readonly_fields = ('shop_order', 'amount', 'sequence')
+    fields = ('shop_order', 'amount', 'sequence')
+
+
+@admin.register(CommissionPayment)
+class CommissionPaymentAdmin(admin.ModelAdmin):
+    """Admin configuration for Merchant -> Platform commission payments."""
+    list_display = (
+        'payment_number', 'shop', 'amount', 'liability_before', 'liability_after',
+        'status', 'transaction_reference', 'created_at'
+    )
+    list_filter = ('status', 'payment_method', 'created_at')
+    search_fields = (
+        'shop__name', 'payment_number', 'transaction_reference',
+        'shop_orders__order__order_number', 'lines__shop_order__order__order_number'
+    )
+    readonly_fields = (
+        'payment_number', 'shop', 'amount', 'liability_before', 'liability_after',
+        'status', 'created_at', 'updated_at', 'recorded_by'
+    )
+    inlines = [CommissionPaymentLineInline]
+
+    def has_add_permission(self, request):
+        # Payments must go through the audit-controlled API; disallow raw admin creates.
+        return False
+
+
+@admin.register(FinancialLedgerEntry)
+class FinancialLedgerEntryAdmin(admin.ModelAdmin):
+    """Read-only audit trail of every money movement on the platform."""
+    list_display = (
+        'created_at', 'category', 'entry_type', 'amount',
+        'shop_name', 'order_number', 'reference_id', 'recorded_by_display'
+    )
+    list_filter = ('category', 'entry_type', 'created_at')
+    search_fields = ('reference_id', 'notes', 'order__order_number', 'shop__name')
+    date_hierarchy = 'created_at'
+    readonly_fields = (
+        'id', 'entry_type', 'category', 'amount', 'order', 'shop_order', 'shop',
+        'reference_id', 'notes', 'created_at', 'recorded_by'
+    )
+    get_list_select_related = ('shop', 'order', 'recorded_by')
+
+    def has_add_permission(self, request):
+        # Ledger is written exclusively by server-side money movement flows.
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        # Appended-only audit log; entries are immutable.
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def shop_name(self, obj):
+        return obj.shop.name if obj.shop else 'Platform'
+    shop_name.short_description = 'Shop'
+    shop_name.admin_order_field = 'shop__name'
+
+    def order_number(self, obj):
+        return obj.order.order_number if obj.order else '-'
+    order_number.short_description = 'Order'
+    order_number.admin_order_field = 'order__order_number'
+
+    def recorded_by_display(self, obj):
+        return obj.recorded_by.phone if obj.recorded_by else 'System'
+    recorded_by_display.short_description = 'Recorded By'
+    recorded_by_display.admin_order_field = 'recorded_by__phone'
 
 
 from .models import MoneyDectedButOrderFailed, RefundRecord

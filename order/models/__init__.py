@@ -6,6 +6,7 @@ from .money_deducted import MoneyDectedButOrderFailed
 from .refund_record import RefundRecord
 from .ledger import FinancialLedgerEntry
 from .settlement import MerchantSettlement
+from .commission import CommissionPayment, CommissionPaymentLine
 
 __all__ = [
     'Order',
@@ -16,4 +17,6 @@ __all__ = [
     'RefundRecord',
     'FinancialLedgerEntry',
     'MerchantSettlement',
+    'CommissionPayment',
+    'CommissionPaymentLine',
 ]
